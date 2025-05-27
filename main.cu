@@ -160,7 +160,7 @@ class Cuerda
         avhz += hz[i];
       }
       avhz *= 1.0f/N;
-      for(int i=0; i<N; i++) z[i] += hz[i];
+      for(int i=0; i<N; i++) z[i] += (hz[i]-avhz);
     }
 
     ~Cuerda(){
@@ -272,8 +272,8 @@ int two_system()
     std::ofstream outz("averagedistances.txt");
 
     int measurements=0;
-    int stride = 20; // Number of steps between measurements
-    thrust::host_vector<REAL> distances(stride);    
+    int stride = 1000; // Number of steps between measurements
+    thrust::host_vector<REAL> distances(stride,0.0f);    
 
     // equilibration
     int eq_steps = 50000;
@@ -283,7 +283,7 @@ int two_system()
     for (int n = 0; n < steps; ++n) {
         if(n%stride==0){
           cuerda2.copy_conf(cuerda1);
-          cuerda2.perturb_conf(0.0001);
+          cuerda2.perturb_conf(0.001);
           measurements++;
         }
 
