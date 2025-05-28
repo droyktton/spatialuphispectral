@@ -115,14 +115,40 @@ class Cuerda
       std::cout << "N=" << N << std::endl;
       #endif
     };
+    
+    REAL distance_conf_fourier(Cuerda &c, int nc){
+        complex zcm1=complex(0.f,0.f);
+        complex zcm2=complex(0.f,0.f);
+        
+        REAL dist =
+        thrust::transform_reduce
+        (
+          thrust::make_zip_iterator(thrust::make_tuple(z_hat.begin(),c.z_hat.begin())),
+          thrust::make_zip_iterator(thrust::make_tuple(z_hat.begin()+nc,c.z_hat.begin()+nc)),
+          [zcm1,zcm2]__device__ __host__ (thrust::tuple<complex,complex> tuplez)
+          {
+            complex z1 = thrust::get<0>(tuplez)-zcm1;
+            complex z2 = thrust::get<1>(tuplez)-zcm1;
+            return powf(z1.real() - z2.real(),2.0)+powf(z1.imag() - z2.imag(),2.0);
+            //return powf(z1.real() - z2.real(),2.0);
+          },
+          REAL(0.0f),
+          thrust::plus<REAL>()
+        );
+
+        return dist/N;
+    }
 
     REAL distance_conf(Cuerda &c){
+      
+      complex zcm1=complex(0.f,0.f);
+      complex zcm2=complex(0.f,0.f);
 
-      complex zcm1 = thrust::reduce(z.begin(), z.end());
+      /*complex zcm1 = thrust::reduce(z.begin(), z.end());
       complex zcm2 = thrust::reduce(c.z.begin(), c.z.end());
       zcm1 *= 0.0f/N;
-      zcm2 *= 0.0f/N;
-    
+      zcm2 *= 0.0f/N;*/
+
 
       REAL dist =
       thrust::transform_reduce
@@ -131,8 +157,8 @@ class Cuerda
         thrust::make_zip_iterator(thrust::make_tuple(z.end(),c.z.end())),
         [zcm1,zcm2]__device__ __host__ (thrust::tuple<complex,complex> tuplez)
         {
-          complex z1 = thrust::get<0>(tuplez)-zcm1;
-          complex z2 = thrust::get<1>(tuplez)-zcm2;
+          complex z1 = thrust::get<0>(tuplez);
+          complex z2 = thrust::get<1>(tuplez);
           return powf(z1.real() - z2.real(),2.0)+powf(z1.imag() - z2.imag(),2.0);
           //return powf(z1.real() - z2.real(),2.0);
         },
@@ -273,13 +299,13 @@ int two_system()
 
     int measurements=0;
     int stride = 1000; // Number of steps between measurements
-    thrust::host_vector<REAL> distances(stride,0.0f);    
+    thrust::host_vector<complex> distances(stride,complex(0.0f,0.0f));    
 
     // equilibration
     int eq_steps = 50000;
     for (int n = 0; n < eq_steps; ++n) cuerda1.step();
 
-    // Lyapunov measurements
+    // Lyapunov measurements (stride must divide steps)
     for (int n = 0; n < steps; ++n) {
         if(n%stride==0){
           cuerda2.copy_conf(cuerda1);
@@ -291,13 +317,17 @@ int two_system()
         cuerda2.step();
 
         REAL dist = cuerda1.distance_conf(cuerda2);
-        std::cout << dist << std::endl;
+        REAL dist_fourier = cuerda1.distance_conf_fourier(cuerda2,64);
+        std::cout << dist << " " << dist_fourier << std::endl;
         
-        distances[n % stride] += dist; 
+        distances[n % stride] += complex(dist, dist_fourier); 
     }
     
     for (int i = 0; i < stride; ++i) {
-        outz << distances[i]/measurements << std::endl;
+        outz 
+        << distances[i].real()/measurements << " " 
+        << distances[i].imag()/measurements << 
+        std::endl;
     }
     
     return 0;
