@@ -123,8 +123,8 @@ class Cuerda
         REAL dist =
         thrust::transform_reduce
         (
-          thrust::make_zip_iterator(thrust::make_tuple(z_hat.begin(),c.z_hat.begin())),
-          thrust::make_zip_iterator(thrust::make_tuple(z_hat.begin()+nc,c.z_hat.begin()+nc)),
+          thrust::make_zip_iterator(thrust::make_tuple(z_hat.begin()+1,c.z_hat.begin()+1)),
+          thrust::make_zip_iterator(thrust::make_tuple(z_hat.begin()+nc+1,c.z_hat.begin()+nc+1)),
           [zcm1,zcm2]__device__ __host__ (thrust::tuple<complex,complex> tuplez)
           {
             complex z1 = thrust::get<0>(tuplez)-zcm1;
@@ -298,7 +298,7 @@ int two_system()
     std::ofstream outz("averagedistances.txt");
 
     int measurements=0;
-    int stride = 50; // Number of steps between measurements
+    int stride = 500; // Number of steps between measurements
     thrust::host_vector<complex> distances(stride,complex(0.0f,0.0f));    
 
     // equilibration
