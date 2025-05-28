@@ -298,7 +298,7 @@ int two_system()
     std::ofstream outz("averagedistances.txt");
 
     int measurements=0;
-    int stride = 1000; // Number of steps between measurements
+    int stride = 50; // Number of steps between measurements
     thrust::host_vector<complex> distances(stride,complex(0.0f,0.0f));    
 
     // equilibration
