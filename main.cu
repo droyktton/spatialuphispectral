@@ -22,15 +22,15 @@ typedef float REAL;
 
 using complex = thrust::complex<REAL>;
 
-const int N = 4096;
-const REAL L = 4096.0;
+const int N = 16384;
+const REAL L = N*1.0f;
 const REAL dx = L / N;
-const REAL dt = 0.05f;
-const int steps = 50000;
+const REAL dt = 0.2f;
+const int steps = 100000;
 
-const complex alpha(1.0f, 0.0f);
-const REAL K = 1.0f;
-const REAL N_n = 1.0f;
+const complex alpha(0.27f, 0.0f);
+const REAL K = 0.796f;
+const REAL N_n = 0.016f;
 REAL h_Ba;
 __constant__ REAL B_a;
 
@@ -298,7 +298,7 @@ int two_system()
     std::ofstream outz("averagedistances.txt");
 
     int measurements=0;
-    int stride = 500; // Number of steps between measurements
+    int stride = 1000; // Number of steps between measurements
     thrust::host_vector<complex> distances(stride,complex(0.0f,0.0f));    
 
     // equilibration
@@ -317,7 +317,7 @@ int two_system()
         cuerda2.step();
 
         REAL dist = cuerda1.distance_conf(cuerda2);
-        REAL dist_fourier = cuerda1.distance_conf_fourier(cuerda2,64);
+        REAL dist_fourier = cuerda1.distance_conf_fourier(cuerda2,16);
         std::cout << dist << " " << dist_fourier << std::endl;
         
         distances[n % stride] += complex(dist, dist_fourier); 
