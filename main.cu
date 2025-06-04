@@ -224,7 +224,7 @@ class Cuerda
       for (int i = 0; i < h_N; ++i) {
           REAL x = i * dx;
           //z0[i] = complex(0.0f, 0.0f);
-          z0[i] = complex(rand()*1.0f/RAND_MAX, rand()*1.0f/RAND_MAX);
+          z0[i] = 0.000*complex(rand()*1.0f/RAND_MAX, rand()*1.0f/RAND_MAX);
           //if(i<10) std::cout << z0[i] << std::endl;
       }
       z = z0;
@@ -350,7 +350,7 @@ int two_system()
     for (int n = 0; n < steps; ++n) {
         if(n%stride==0){
           cuerda2.copy_conf(cuerda1);
-          cuerda2.perturb_conf(0.001);
+          cuerda2.perturb_conf(0.0001);
           measurements++;
         }
 
@@ -488,11 +488,11 @@ int main(int agrc, char **argv) {
         
     L = h_N*1.0f;
     dx = L / h_N;  
-    dt = 0.2f;
+    dt = 0.5f;
     //steps = 500000;
 
     alpha=complex(0.27f, 0.0f);
-    K = 0.796f;
+    K = 0.0; //0.796f;
     N_n = 0.016f;
 
 
