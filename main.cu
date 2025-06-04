@@ -22,11 +22,11 @@ typedef float REAL;
 
 using complex = thrust::complex<REAL>;
 
-const int N = 16384;
+const int N = 8192;
 const REAL L = N*1.0f;
 const REAL dx = L / N;
 const REAL dt = 0.2f;
-const int steps = 100000;
+const int steps = 1000000;
 
 const complex alpha(0.27f, 0.0f);
 const REAL K = 0.796f;
@@ -49,7 +49,8 @@ __global__ void nonlinear_term_kernel(const complex* z, complex* nonlinear, REAL
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     if (i < N) {
         REAL phi = -z[i].imag();
-        nonlinear[i] = -complex(0.0f, 1.0f) * (N_n / 2.0f) * sinf(2 * phi);
+        //nonlinear[i] = -complex(0.0f, 1.0f) * (N_n / 2.0f) * sinf(2 * phi); // different in the notes...
+        nonlinear[i] = complex(0.0f, 1.0f) * (N_n / 2.0f) * sinf(2 * phi);
     }
 }
 
@@ -101,7 +102,7 @@ thrust::tuple<complex,complex> roughness(thrust::device_vector<complex> &z)
 
 class Cuerda
 {
-  public:
+    public:
     Cuerda(){
       z.resize(N);
       z_hat.resize(N);
@@ -282,12 +283,24 @@ class Cuerda
       return roughness(z);
     }
 
+    void print_Sq_vs_t(std::ofstream &out, const REAL t)
+    {
+      for(int i = 0; i < N/2; ++i) {
+        complex z_hat_i = z_hat[i];
+        REAL q_i = 2*M_PI*i/L;
+        REAL Sq = z_hat_i.real() * z_hat_i.real() + z_hat_i.imag() * z_hat_i.imag();
+        out << q_i << " " << Sq << " " << " " << t << " " << z_hat_i.real() << " " << z_hat_i.imag() << std::endl;
+      }
+      out << "\n" << std::endl;
+    }
+
     cufftHandle plan;
     thrust::device_vector<complex> z;
     thrust::device_vector<complex> z_hat;
     thrust::device_vector<complex> nonlinear;
     thrust::device_vector<complex> L_k;
     thrust::device_vector<complex> zaux;
+
 };
 
 int two_system()
@@ -333,16 +346,30 @@ int two_system()
     return 0;
 }
 
+complex one_particle_solution(REAL h){
+    REAL a = alpha.real();
+    REAL hw = a*N_n/2.0f; 
+    REAL vphi = (h > hw)?(sqrtf((h/hw)*(h/hw)-1.0f)*hw/(1+a*a)):0.0f;  
+    REAL vu = (h > hw)?(h/a-sqrtf((h/hw)*(h/hw)-1.0f)*hw/(a+a*a*a)):(h/a);
+    complex z(vu, vphi);
+    return z;  
+}
+
 int one_system()
 {
     Cuerda cuerda;
     //cuerda.init();
 
     std::ofstream outz("z_vs_t.txt");
+    std::ofstream outSq("Sq_vs_t.txt");
 
     long Nmes=0;
     complex av_cm=complex(0.0f, 0.0f);
     complex av_cm2=complex(0.0f, 0.0f);
+    complex zcm_middle(0.0f, 0.0f);
+    long unsigned int n_middle = int(steps*0.5);
+
+    unsigned int nlog = 1;
 
     for (int n = 0; n < steps; ++n) {
         cuerda.step();
@@ -357,16 +384,26 @@ int one_system()
             << zcm.imag() << " "
             << zcm2.real() << " "
             << zcm2.imag() << std::endl;
-
-            av_cm+=zcm;
-            av_cm2+=zcm2;
-            Nmes++;
-
-            /*std::cout << n << " "
-            << zcm.real() << " "
-            << zcm.imag() << " "
-            << zcm2.real() << " "
-            << zcm2.imag() << std::endl;*/
+            
+            if(n>n_middle)
+            {
+              av_cm+=zcm;
+              av_cm2+=zcm2;
+              Nmes++;        
+            }
+        }
+        
+        if(n==n_middle)
+        {
+            thrust::tuple<complex,complex> result = cuerda.rough();
+            zcm_middle = thrust::get<1>(result);
+        }
+        
+        if(n == nlog) 
+        {
+            //outSq << "Step: " << n <<  std::endl;
+            nlog *= 2;
+            cuerda.print_Sq_vs_t(outSq, n*dt);
         }
     }
 
@@ -386,18 +423,23 @@ int one_system()
 
     std::ofstream out_av("averages.dat");
 
+    complex one_part_sol = one_particle_solution(h_Ba);
+    complex delta_zcm = (zcm - zcm_middle)/((steps-n_middle)*dt);
+
     out_av
     << h_Ba
-    << " " << -zcm.real()/steps << " " << zcm.imag()/steps
+    << " " << -delta_zcm.real() << " " << delta_zcm.imag()
     << " " << av_cm2.real() << " " << av_cm2.imag()
     << " " << zcm2.real() << " " << zcm2.imag()
+    << " " << one_part_sol.real() << " " << one_part_sol.imag()
     << std::endl;
 
     std::cout
     << h_Ba
-    << " " << -zcm.real()/steps << " " << zcm.imag()/steps
+    << " " << -delta_zcm.real() << " " << delta_zcm.imag()
     << " " << av_cm2.real() << " " << av_cm2.imag()
     << " " << zcm2.real() << " " << zcm2.imag()
+    << " " << one_part_sol.real() << " " << one_part_sol.imag()
     << std::endl;
 
     return 0;
