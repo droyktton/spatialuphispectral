@@ -22,21 +22,38 @@ typedef float REAL;
 
 using complex = thrust::complex<REAL>;
 
-const int N = 8192;
-const REAL L = N*1.0f;
-const REAL dx = L / N;
+
+/*#ifndef N
+#define N 32768
+#endif
+*/
+//const int N = 32768;
+
+int h_N;
+__constant__ int N;
+
+REAL h_Ba;
+__constant__ REAL B_a;
+
+REAL L, dx, dt;
+int steps;
+complex alpha;
+REAL K, N_n;
+
+/*const REAL L = h_N*1.0f;
+const REAL dx = L / h_N;
 const REAL dt = 0.2f;
-const int steps = 1000000;
+const int steps = 500000;
 
 const complex alpha(0.27f, 0.0f);
 const REAL K = 0.796f;
 const REAL N_n = 0.016f;
-REAL h_Ba;
-__constant__ REAL B_a;
+*/
 
 
 
-__global__ void init_wave_numbers(complex* L_k, int N, REAL K, REAL L) {
+
+__global__ void init_wave_numbers(complex* L_k, REAL K, REAL L) {
     int i = threadIdx.x + blockDim.x * blockIdx.x;
     if (i < N) {
         int k = (i <= N/2) ? i : i - N;
@@ -45,7 +62,7 @@ __global__ void init_wave_numbers(complex* L_k, int N, REAL K, REAL L) {
     }
 }
 
-__global__ void nonlinear_term_kernel(const complex* z, complex* nonlinear, REAL N_n, int N) {
+__global__ void nonlinear_term_kernel(const complex* z, complex* nonlinear, REAL N_n) {
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     if (i < N) {
         REAL phi = -z[i].imag();
@@ -56,7 +73,7 @@ __global__ void nonlinear_term_kernel(const complex* z, complex* nonlinear, REAL
 
 __global__ void crank_nicholson_update(complex* z_hat, const complex* N_hat,
                                        const complex* L_k,
-                                       complex alpha, REAL dt, REAL B_a, int N) {
+                                       complex alpha, REAL dt, REAL B_a) {
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     if (i < N) {
         complex i_unit(0,1);
@@ -68,7 +85,7 @@ __global__ void crank_nicholson_update(complex* z_hat, const complex* N_hat,
     }
 }
 
-__global__ void normalize(complex* z, int N) {
+__global__ void normalize(complex* z) {
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     if (i < N) {
         z[i] /= static_cast<REAL>(N);
@@ -77,9 +94,9 @@ __global__ void normalize(complex* z, int N) {
 
 thrust::tuple<complex,complex> roughness(thrust::device_vector<complex> &z)
 {
-    size_t N = z.size();
+    size_t N_ = z.size();
     complex zcm = thrust::reduce(z.begin(), z.end());
-    zcm *= 1.0f/N;
+    zcm *= 1.0f/N_;
 
     complex zcm2 = thrust::transform_reduce(
         z.begin(),
@@ -95,7 +112,7 @@ thrust::tuple<complex,complex> roughness(thrust::device_vector<complex> &z)
         complex(0.0f, 0.0f),
         thrust::plus<complex>());
 
-    zcm2 *= 1.0f/N;
+    zcm2 *= 1.0f/N_;
 
     return make_tuple(zcm2, zcm);
 }
@@ -104,16 +121,16 @@ class Cuerda
 {
     public:
     Cuerda(){
-      z.resize(N);
-      z_hat.resize(N);
-      nonlinear.resize(N);
-      L_k.resize(N);
+      z.resize(h_N);
+      z_hat.resize(h_N);
+      nonlinear.resize(h_N);
+      L_k.resize(h_N);
       //zaux.resize(N);
 
       init();
 
       #ifdef DEBUG
-      std::cout << "N=" << N << std::endl;
+      std::cout << "N=" << h_N << std::endl;
       #endif
     };
     
@@ -137,7 +154,7 @@ class Cuerda
           thrust::plus<REAL>()
         );
 
-        return dist/N;
+        return dist/h_N;
     }
 
     REAL distance_conf(Cuerda &c){
@@ -167,7 +184,7 @@ class Cuerda
         thrust::plus<REAL>()
       );
 
-      return dist/N;
+      return dist/h_N;
     }
 
     void copy_conf(Cuerda &c)
@@ -180,14 +197,14 @@ class Cuerda
 
     void perturb_conf(REAL epsilon)
     {
-      thrust::host_vector<complex> hz(N);
+      thrust::host_vector<complex> hz(h_N);
       complex avhz;
-      for (int i = 0; i < N; ++i) {
+      for (int i = 0; i < h_N; ++i) {
         hz[i] = epsilon*complex(rand()*1.0f/RAND_MAX, rand()*1.0f/RAND_MAX);
         avhz += hz[i];
       }
-      avhz *= 1.0f/N;
-      for(int i=0; i<N; i++) z[i] += (hz[i]-avhz);
+      avhz *= 1.0f/h_N;
+      for(int i=0; i<h_N; i++) z[i] += (hz[i]-avhz);
     }
 
     ~Cuerda(){
@@ -196,15 +213,15 @@ class Cuerda
 
     void init(){
       #ifdef DOUBLE_PRECISION
-      cufftPlan1d(&plan, N, CUFFT_Z2Z, 1);
+      cufftPlan1d(&plan, h_N, CUFFT_Z2Z, 1);
       #else 
-      cufftPlan1d(&plan, N, CUFFT_C2C, 1);
+      cufftPlan1d(&plan, h_N, CUFFT_C2C, 1);
       #endif
       
       srand(42);
       // Initial condition: z = cos(x)
-      thrust::host_vector<complex> z0(N);
-      for (int i = 0; i < N; ++i) {
+      thrust::host_vector<complex> z0(h_N);
+      for (int i = 0; i < h_N; ++i) {
           REAL x = i * dx;
           //z0[i] = complex(0.0f, 0.0f);
           z0[i] = complex(rand()*1.0f/RAND_MAX, rand()*1.0f/RAND_MAX);
@@ -213,7 +230,7 @@ class Cuerda
       z = z0;
 
       // Init linear operator
-      init_wave_numbers<<<(N+255)/256, 256>>>(thrust::raw_pointer_cast(L_k.data()), N, K, L);
+      init_wave_numbers<<<(h_N+255)/256, 256>>>(thrust::raw_pointer_cast(L_k.data()), K, L);
 
       #ifdef DEBUG
       std::cout << "K=" << K << std::endl;
@@ -224,13 +241,14 @@ class Cuerda
       std::cout << "alpha=" << alpha << std::endl;
       std::cout << "N_n=" << N_n << std::endl;
       std::cout << "B_a=" << h_Ba << std::endl;
+      std::cout << "N=" << h_N << std::endl;
       #endif
     }
 
     void step(){
-       nonlinear_term_kernel<<<(N+255)/256, 256>>>(
+       nonlinear_term_kernel<<<(h_N+255)/256, 256>>>(
             thrust::raw_pointer_cast(z.data()),
-            thrust::raw_pointer_cast(nonlinear.data()), N_n, N);
+            thrust::raw_pointer_cast(nonlinear.data()), N_n);
 
         #ifdef DOUBLE_PRECISION
         cufftExecZ2Z(plan,
@@ -257,11 +275,11 @@ class Cuerda
             CUFFT_FORWARD);
         #endif
       
-        crank_nicholson_update<<<(N+255)/256, 256>>>(
+        crank_nicholson_update<<<(h_N+255)/256, 256>>>(
             thrust::raw_pointer_cast(z_hat.data()),
             thrust::raw_pointer_cast(nonlinear.data()),
             thrust::raw_pointer_cast(L_k.data()),
-            alpha, dt, h_Ba, N);
+            alpha, dt, h_Ba);
 
         #ifdef DOUBLE_PRECISION
         cufftExecZ2Z(plan,
@@ -275,7 +293,7 @@ class Cuerda
             CUFFT_INVERSE);
         #endif
 
-        normalize<<<(N+255)/256, 256>>>(thrust::raw_pointer_cast(z.data()), N);
+        normalize<<<(h_N+255)/256, 256>>>(thrust::raw_pointer_cast(z.data()));
     }
 
     thrust::tuple<complex,complex> rough()
@@ -285,11 +303,21 @@ class Cuerda
 
     void print_Sq_vs_t(std::ofstream &out, const REAL t)
     {
-      for(int i = 0; i < N/2; ++i) {
+      complex unit = complex(0.0f, 1.0f);
+      
+      for(int i = 0; i < h_N/2; ++i) {
         complex z_hat_i = z_hat[i];
-        REAL q_i = 2*M_PI*i/L;
-        REAL Sq = z_hat_i.real() * z_hat_i.real() + z_hat_i.imag() * z_hat_i.imag();
-        out << q_i << " " << Sq << " " << " " << t << " " << z_hat_i.real() << " " << z_hat_i.imag() << std::endl;
+        complex z_hat_i_neg = z_hat[h_N-i];
+        
+        // Note: z_hat[N-i] is the negative frequency component
+        complex z_hat_i_neg_conj = thrust::conj(z_hat_i_neg);
+        
+        complex zu = (z_hat_i + z_hat_i_neg_conj) / 2.0f;  
+        complex zphi = unit*(z_hat_i - z_hat_i_neg_conj) / 2.0f;
+        
+        REAL Squ = zu.real() * zu.real() + zu.imag() * zu.imag();
+        REAL Sqphi = zphi.real() * zphi.real() + zphi.imag() * zphi.imag();
+        out << 2*M_PI*i/L << " " << Squ << " " << Sqphi << " " << t << std::endl;
       }
       out << "\n" << std::endl;
     }
@@ -410,7 +438,7 @@ int one_system()
     // Save final result
     thrust::host_vector<complex> z_final = cuerda.z;
     std::ofstream out("z_final.txt");
-    for (int i = 0; i < N; ++i) {
+    for (int i = 0; i < h_N; ++i) {
         out << i * dx << "\t" << z_final[i].real() << "\t" << z_final[i].imag() << "\n";
     }
     out.close();
@@ -449,9 +477,38 @@ int one_system()
 int main(int agrc, char **argv) {
 
     // Copy to device constant memory
-    h_Ba = atof(argv[1]);
+    h_N = atoi(argv[1]);
+    cudaMemcpyToSymbol(N, &h_N, sizeof(int));
+    
+    // Copy to device constant memory
+    h_Ba = atof(argv[2]);
     cudaMemcpyToSymbol(B_a, &h_Ba, sizeof(REAL));
+    
+    steps = atoi(argv[3]);
+        
+    L = h_N*1.0f;
+    dx = L / h_N;  
+    dt = 0.2f;
+    //steps = 500000;
 
+    alpha=complex(0.27f, 0.0f);
+    K = 0.796f;
+    N_n = 0.016f;
+
+
+    std::ofstream out("parameters.txt");
+    out << "N=" << h_N << std::endl;
+    out << "B_a=" << h_Ba << std::endl;   
+    out << "L=" << L << std::endl;
+    out << "dx=" << dx << std::endl;
+    out << "dt=" << dt << std::endl;
+    out << "steps=" << steps << std::endl;
+    out << "alpha=" << alpha << std::endl;
+    out << "K=" << K << std::endl;
+    out << "N_n=" << N_n << std::endl;
+    out << "Using " << (sizeof(REAL) == sizeof(double) ? "double" : "float") << " precision." << std::endl;
+    out.close();
+    
     #ifndef TWO_SYSTEMS
     one_system();
     #else
