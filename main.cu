@@ -395,36 +395,54 @@ int one_system()
     complex av_cm=complex(0.0f, 0.0f);
     complex av_cm2=complex(0.0f, 0.0f);
     complex zcm_middle(0.0f, 0.0f);
-    long unsigned int n_middle = int(steps*0.5);
+    complex zcm_half_steps(0.0f, 0.0f);
+    long unsigned int n_middle = 0, n_half_steps = 0;
 
     unsigned int nlog = 1;
 
-    for (int n = 0; n < steps; ++n) {
+
+    complex zcm2, zcm;
+    thrust::tuple<complex,complex> result = cuerda.rough();
+    zcm2 = thrust::get<0>(result);
+    zcm = thrust::get<1>(result);
+    bool equilibrated = false;
+    
+    int n = 0;
+    for (n = 0; ((zcm.imag()<2.0f*M_PI*20.0f) && n<steps); ++n) {
         cuerda.step();
 
         if (n % 100 == 0) {
-            thrust::tuple<complex,complex> result = cuerda.rough();
-            complex zcm2 = thrust::get<0>(result);
-            complex zcm = thrust::get<1>(result);
+            result = cuerda.rough();
+            zcm2 = thrust::get<0>(result);
+            zcm = thrust::get<1>(result);
             outz
-            << n << " "
+            << n*dt << " "
             << zcm.real() << " "
             << zcm.imag() << " "
             << zcm2.real() << " "
             << zcm2.imag() << std::endl;
             
-            if(n>n_middle)
+            if(zcm.imag()>2*M_PI*5)
             {
               av_cm+=zcm;
               av_cm2+=zcm2;
-              Nmes++;        
+              Nmes++;
             }
         }
         
-        if(n==n_middle)
+        if(zcm.imag()>2*M_PI*10 && !equilibrated)
         {
-            thrust::tuple<complex,complex> result = cuerda.rough();
+            std::cout << "Equilibration finished at step: " << n << ", distance traveled: " << zcm.imag() << std::endl;
+            equilibrated = true;
+            
+            result = cuerda.rough();
             zcm_middle = thrust::get<1>(result);
+            n_middle = n;
+        }
+        if(n==int(steps*0.5)) {
+            result = cuerda.rough();
+            zcm_half_steps = thrust::get<1>(result);
+            n_half_steps = n;        
         }
         
         if(n == nlog) 
@@ -443,16 +461,23 @@ int one_system()
     }
     out.close();
 
-    thrust::tuple<complex,complex> result = cuerda.rough();
-    complex zcm2 = thrust::get<0>(result);
-    complex zcm = thrust::get<1>(result);
+    result = cuerda.rough();
+    zcm2 = thrust::get<0>(result);
+    zcm = thrust::get<1>(result);
     av_cm*=1.0f/Nmes;
     av_cm2*=1.0f/Nmes;
+
+    std::cout << "Run finished at step: " << n << ", distance traveled: " << zcm.imag() << std::endl;
 
     std::ofstream out_av("averages.dat");
 
     complex one_part_sol = one_particle_solution(h_Ba);
-    complex delta_zcm = (zcm - zcm_middle)/((steps-n_middle)*dt);
+    
+    complex delta_zcm;
+    if(equilibrated)
+    delta_zcm = (zcm - zcm_middle)/((n-n_middle)*dt);
+    else 
+    delta_zcm = (zcm-zcm_half_steps)/((n-n_half_steps)*dt);
 
     out_av
     << h_Ba
@@ -462,14 +487,15 @@ int one_system()
     << " " << one_part_sol.real() << " " << one_part_sol.imag()
     << std::endl;
 
-    std::cout
+    /*std::cout
     << h_Ba
     << " " << -delta_zcm.real() << " " << delta_zcm.imag()
     << " " << av_cm2.real() << " " << av_cm2.imag()
     << " " << zcm2.real() << " " << zcm2.imag()
     << " " << one_part_sol.real() << " " << one_part_sol.imag()
     << std::endl;
-
+    */
+    
     return 0;
 }
 
@@ -488,13 +514,15 @@ int main(int agrc, char **argv) {
         
     L = h_N*1.0f;
     dx = L / h_N;  
-    dt = 0.5f;
+    dt = 1.0f;
     //steps = 500000;
 
     alpha=complex(0.27f, 0.0f);
     K = 0.0; //0.796f;
     N_n = 0.016f;
 
+    assert(h_Ba*dt < 0.05);
+    assert(alpha.real()*N_n*dt < 0.05);
 
     std::ofstream out("parameters.txt");
     out << "N=" << h_N << std::endl;
