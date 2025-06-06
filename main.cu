@@ -50,8 +50,33 @@ const REAL K = 0.796f;
 const REAL N_n = 0.016f;
 */
 
+#ifndef EPSILON
+#define EPSILON 0.0001f
+#endif
+
+#define NBINS 100
 
 
+complex one_particle_solution(REAL h){
+    REAL a = alpha.real();
+    REAL hw = a*N_n/2.0f; 
+    REAL vphi = (h > hw)?(sqrtf((h/hw)*(h/hw)-1.0f)*hw/(1+a*a)):0.0f;  
+    REAL vu = (h > hw)?(h/a-sqrtf((h/hw)*(h/hw)-1.0f)*hw/(a+a*a*a)):(h/a);
+    complex z(vu, vphi);
+    return z;  
+}
+
+
+__global__ void histogramKernel(const float* data, int* bins, int N, int Nbins, float xmin, float xmax) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < N) {
+        float x = data[idx];
+        int bin = int((x - xmin) / (xmax - xmin) * Nbins);
+        if (bin >= 0 && bin < Nbins) {
+            atomicAdd(&bins[bin], 1);
+        }
+    }
+}
 
 __global__ void init_wave_numbers(complex* L_k, REAL K, REAL L) {
     int i = threadIdx.x + blockDim.x * blockIdx.x;
@@ -125,7 +150,11 @@ class Cuerda
       z_hat.resize(h_N);
       nonlinear.resize(h_N);
       L_k.resize(h_N);
+      z_prev.resize(h_N);
+      dzdt.resize(h_N);
       //zaux.resize(N);
+      histogram_udot.resize(NBINS);
+      histogram_phidot.resize(NBINS);
 
       init();
 
@@ -220,15 +249,21 @@ class Cuerda
       
       srand(42);
       // Initial condition: z = cos(x)
-      thrust::host_vector<complex> z0(h_N);
-      for (int i = 0; i < h_N; ++i) {
+      //thrust::host_vector<complex> z0(h_N);
+      
+      /*for (int i = 0; i < h_N; ++i) {
           REAL x = i * dx;
           //z0[i] = complex(0.0f, 0.0f);
-          z0[i] = 0.000*complex(rand()*1.0f/RAND_MAX, rand()*1.0f/RAND_MAX);
+          z0[i] = 0.0001*complex(rand()*1.0f/RAND_MAX, rand()*1.0f/RAND_MAX);
           //if(i<10) std::cout << z0[i] << std::endl;
       }
-      z = z0;
-
+      z = z0;*/
+      
+      thrust::fill(z.begin(), z.end(), complex(0.0f, 0.0f));
+      perturb_conf(EPSILON);
+      thrust::copy(z.begin(), z.end(), z_prev.begin());
+      thrust::fill(dzdt.begin(), dzdt.end(), complex(0.0f, 0.0f));
+      
       // Init linear operator
       init_wave_numbers<<<(h_N+255)/256, 256>>>(thrust::raw_pointer_cast(L_k.data()), K, L);
 
@@ -294,11 +329,26 @@ class Cuerda
         #endif
 
         normalize<<<(h_N+255)/256, 256>>>(thrust::raw_pointer_cast(z.data()));
+        
+        REAL Dt=dt;
+        thrust::copy(z.begin(), z.end(), z_prev.begin());
+        thrust::transform(z.begin(), z.end(), z_prev.begin(), dzdt.begin(),
+            [Dt]__device__ __host__ (complex z2, complex z1) {
+                return (z2 - z1)/Dt; // dz/dt = (z - z_prev) / dt
+            });
     }
 
     thrust::tuple<complex,complex> rough()
     {
       return roughness(z);
+    }
+    
+    void update_histogram()
+    {
+      complex one_part_sol = one_particle_solution(h_Ba);
+      REAL u0 = one_part_sol.real();
+      REAL phi0 = one_part_sol.imag();
+      //histogramKernel(z, int* bins, int N, int Nbins, float xmin, float xmax);
     }
 
     void print_Sq_vs_t(std::ofstream &out, const REAL t)
@@ -324,11 +374,14 @@ class Cuerda
 
     cufftHandle plan;
     thrust::device_vector<complex> z;
+    thrust::device_vector<complex> z_prev;
+    thrust::device_vector<complex> dzdt;
     thrust::device_vector<complex> z_hat;
     thrust::device_vector<complex> nonlinear;
     thrust::device_vector<complex> L_k;
     thrust::device_vector<complex> zaux;
-
+    thrust::device_vector<int> histogram_udot;
+    thrust::device_vector<int> histogram_phidot;    
 };
 
 int two_system()
@@ -336,7 +389,7 @@ int two_system()
     Cuerda cuerda1;
     Cuerda cuerda2;
 
-    std::ofstream outz("averagedistances.txt");
+    std::ofstream outz("averagedistances.dat");
 
     int measurements=0;
     int stride = 1000; // Number of steps between measurements
@@ -374,22 +427,14 @@ int two_system()
     return 0;
 }
 
-complex one_particle_solution(REAL h){
-    REAL a = alpha.real();
-    REAL hw = a*N_n/2.0f; 
-    REAL vphi = (h > hw)?(sqrtf((h/hw)*(h/hw)-1.0f)*hw/(1+a*a)):0.0f;  
-    REAL vu = (h > hw)?(h/a-sqrtf((h/hw)*(h/hw)-1.0f)*hw/(a+a*a*a)):(h/a);
-    complex z(vu, vphi);
-    return z;  
-}
 
 int one_system()
 {
     Cuerda cuerda;
     //cuerda.init();
 
-    std::ofstream outz("z_vs_t.txt");
-    std::ofstream outSq("Sq_vs_t.txt");
+    std::ofstream outz("z_vs_t.dat");
+    std::ofstream outSq("Sq_vs_t.dat");
 
     long Nmes=0;
     complex av_cm=complex(0.0f, 0.0f);
@@ -408,7 +453,7 @@ int one_system()
     bool equilibrated = false;
     
     int n = 0;
-    for (n = 0; ((zcm.imag()<2.0f*M_PI*20.0f) && n<steps); ++n) {
+    for (n = 0; ((zcm.imag()<2.0f*M_PI*100.0f) && n<steps); ++n) {
         cuerda.step();
 
         if (n % 100 == 0) {
@@ -430,7 +475,7 @@ int one_system()
             }
         }
         
-        if(zcm.imag()>2*M_PI*10 && !equilibrated)
+        if(zcm.imag()>2*M_PI*90.0f && !equilibrated)
         {
             std::cout << "Equilibration finished at step: " << n << ", distance traveled: " << zcm.imag() << std::endl;
             equilibrated = true;
@@ -439,7 +484,7 @@ int one_system()
             zcm_middle = thrust::get<1>(result);
             n_middle = n;
         }
-        if(n==int(steps*0.5)) {
+        if(n==int(steps*0.8)) {
             result = cuerda.rough();
             zcm_half_steps = thrust::get<1>(result);
             n_half_steps = n;        
@@ -455,9 +500,13 @@ int one_system()
 
     // Save final result
     thrust::host_vector<complex> z_final = cuerda.z;
-    std::ofstream out("z_final.txt");
+    thrust::host_vector<complex> dzdt_final = cuerda.dzdt;
+    std::ofstream out("z_final.dat");
     for (int i = 0; i < h_N; ++i) {
-        out << i * dx << "\t" << z_final[i].real() << "\t" << z_final[i].imag() << "\n";
+        out 
+        << i * dx << "\t" << z_final[i].real() << "\t" << z_final[i].imag() 
+        << "\t" << dzdt_final[i].real() << "\t" << dzdt_final[i].imag()
+        << "\n";
     }
     out.close();
 
@@ -500,7 +549,7 @@ int one_system()
 }
 
 
-int main(int agrc, char **argv) {
+int main(int argc, char **argv) {
 
     // Copy to device constant memory
     h_N = atoi(argv[1]);
@@ -510,21 +559,25 @@ int main(int agrc, char **argv) {
     h_Ba = atof(argv[2]);
     cudaMemcpyToSymbol(B_a, &h_Ba, sizeof(REAL));
     
+    if(argc > 3)
     steps = atoi(argv[3]);
-        
+                
     L = h_N*1.0f;
     dx = L / h_N;  
-    dt = 1.0f;
+    dt = 3.0f;
     //steps = 500000;
 
     alpha=complex(0.27f, 0.0f);
-    K = 0.0; //0.796f;
+    K = 0.796f;
     N_n = 0.016f;
 
-    assert(h_Ba*dt < 0.05);
-    assert(alpha.real()*N_n*dt < 0.05);
+    dt = (h_Ba>alpha.real()*N_n/2.0)?
+         (0.01/h_Ba):(0.01/(alpha.real()*N_n/2.0));
 
-    std::ofstream out("parameters.txt");
+    assert(h_Ba*dt < 0.05);
+    assert(alpha.real()*N_n*dt/2.0 < 0.05);
+
+    std::ofstream out("parameters.dat");
     out << "N=" << h_N << std::endl;
     out << "B_a=" << h_Ba << std::endl;   
     out << "L=" << L << std::endl;
@@ -535,6 +588,7 @@ int main(int agrc, char **argv) {
     out << "K=" << K << std::endl;
     out << "N_n=" << N_n << std::endl;
     out << "Using " << (sizeof(REAL) == sizeof(double) ? "double" : "float") << " precision." << std::endl;
+    out << "EPSILON=" << EPSILON << std::endl;
     out.close();
     
     #ifndef TWO_SYSTEMS
