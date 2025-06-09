@@ -43,7 +43,7 @@ REAL h_Ba;
 __constant__ REAL B_a;
 
 REAL L, dx, dt;
-int steps;
+int steps, periodsphi;
 complex alpha;
 REAL K, N_n;
 unsigned long seed = 42;
@@ -546,7 +546,7 @@ int one_system()
     std::vector<REAL> velphicm_vec;
     
     int n = 0;
-    for (n = 0; ((zcm.imag()<2.0f*M_PI*100.0f) && n<steps); ++n) {
+    for (n = 0; ((zcm.imag()<2.0f*M_PI*periodsphi) && n<steps); ++n) {
         cuerda.step();
 
         if (n % 100 == 0) {
@@ -570,7 +570,7 @@ int one_system()
             << velzcm2.imag() << " "
             << std::endl;
             
-            if(zcm.imag()>2*M_PI*5)
+            if(zcm.imag()>2*M_PI*periodsphi*0.5)
             {
               av_cm+=zcm;
               av_cm2+=zcm2;
@@ -580,7 +580,7 @@ int one_system()
             }
         }
         
-        if(zcm.imag()>2*M_PI*90.0f && !equilibrated)
+        if(zcm.imag()>2*M_PI*periodsphi*0.9 && !equilibrated)
         {
             std::cout << "Equilibration finished at step: " << n << ", distance traveled: " << zcm.imag() << std::endl;
             equilibrated = true;
@@ -681,6 +681,11 @@ int main(int argc, char **argv) {
     seed = atoi(argv[4]);
     srand(seed);
 
+    periodsphi = 100; // Default value
+    if(argc > 5)
+    periodsphi = atoi(argv[5]);
+
+    
     L = h_N*1.0f;
     dx = L / h_N;  
     dt = 3.0f;
@@ -708,6 +713,8 @@ int main(int argc, char **argv) {
     out << "N_n=" << N_n << std::endl;
     out << "Using " << (sizeof(REAL) == sizeof(double) ? "double" : "float") << " precision." << std::endl;
     out << "EPSILON=" << EPSILON << std::endl;
+    out << "periodsphi=" << periodsphi << std::endl;
+    out << "seed=" << seed << std::endl;
     out.close();
     
     #ifndef TWO_SYSTEMS
