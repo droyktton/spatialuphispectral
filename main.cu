@@ -7,12 +7,19 @@
 #include <thrust/tuple.h>
 #include <thrust/functional.h>
 
+#include <vector>
+#include <type_traits>
+
 //#include <cufftXt.h>
 #include <cufft.h>
 #include <cuda_runtime.h>
 #include <cmath>
 #include <iostream>
 #include <fstream>
+
+#include <cufft.h>
+
+//#include "spectrums.h"
 
 #ifdef DOUBLE_PRECISION
 typedef double REAL;
@@ -55,6 +62,83 @@ const REAL N_n = 0.016f;
 #endif
 
 #define NBINS 100
+
+
+// CUDA kernel for computing power spectrum (float)
+__global__ void compute_power_kernel_float(cufftComplex* freq_data, float* power, int size) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < size) {
+        float re = freq_data[i].x;
+        float im = freq_data[i].y;
+        power[i] = re * re + im * im;
+    }
+}
+// CUDA kernel for computing power spectrum (double)
+__global__ void compute_power_kernel_double(cufftDoubleComplex* freq_data, double* power, int size) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < size) {
+        double re = freq_data[i].x;
+        double im = freq_data[i].y;
+        power[i] = re * re + im * im;
+    }
+}
+
+// Templated wrapper
+template<typename T>
+std::vector<T> compute_power_spectrum(const std::vector<T>& input_signal) {
+    static_assert(std::is_same<T, float>::value || std::is_same<T, double>::value,
+                  "Only float or double precision supported");
+
+    const int N = input_signal.size();
+    const int N_freq = N / 2 + 1;
+
+    // Allocate device memory
+    using Real = T;
+    using Complex = typename std::conditional<std::is_same<T, float>::value, cufftComplex, cufftDoubleComplex>::type;
+    Real* d_signal;
+    Real* d_power;
+    cudaMalloc((void**)&d_signal, sizeof(Real) * N);
+    cudaMalloc((void**)&d_power, sizeof(Real) * N_freq);
+
+    // Copy signal to device
+    cudaMemcpy(d_signal, input_signal.data(), sizeof(Real) * N, cudaMemcpyHostToDevice);
+
+    // Create FFT plan
+    cufftHandle plan;
+    if constexpr (std::is_same<T, float>::value) {
+        cufftPlan1d(&plan, N, CUFFT_R2C, 1);
+        cufftExecR2C(plan, reinterpret_cast<cufftReal*>(d_signal),
+                     reinterpret_cast<cufftComplex*>(d_signal));
+    } else {
+        cufftPlan1d(&plan, N, CUFFT_D2Z, 1);
+        cufftExecD2Z(plan, reinterpret_cast<cufftDoubleReal*>(d_signal),
+                     reinterpret_cast<cufftDoubleComplex*>(d_signal));
+    }
+
+    // Compute power spectrum
+    int blockSize = 256;
+    int numBlocks = (N_freq + blockSize - 1) / blockSize;
+    if constexpr (std::is_same<T, float>::value) {
+        compute_power_kernel_float<<<numBlocks, blockSize>>>(
+            reinterpret_cast<cufftComplex*>(d_signal), d_power, N_freq);
+    } else {
+        compute_power_kernel_double<<<numBlocks, blockSize>>>(
+            reinterpret_cast<cufftDoubleComplex*>(d_signal), d_power, N_freq);
+    }
+    cudaDeviceSynchronize();
+
+    // Copy power to host
+    std::vector<T> power_spectrum(N_freq);
+    cudaMemcpy(power_spectrum.data(), d_power, sizeof(Real) * N_freq, cudaMemcpyDeviceToHost);
+
+    // Cleanup
+    cufftDestroy(plan);
+    cudaFree(d_signal);
+    cudaFree(d_power);
+
+    return power_spectrum;
+}
+
 
 
 complex one_particle_solution(REAL h){
@@ -331,11 +415,11 @@ class Cuerda
         normalize<<<(h_N+255)/256, 256>>>(thrust::raw_pointer_cast(z.data()));
         
         REAL Dt=dt;
-        thrust::copy(z.begin(), z.end(), z_prev.begin());
         thrust::transform(z.begin(), z.end(), z_prev.begin(), dzdt.begin(),
             [Dt]__device__ __host__ (complex z2, complex z1) {
                 return (z2 - z1)/Dt; // dz/dt = (z - z_prev) / dt
             });
+        thrust::copy(z.begin(), z.end(), z_prev.begin());
     }
 
     thrust::tuple<complex,complex> rough()
@@ -343,6 +427,11 @@ class Cuerda
       return roughness(z);
     }
     
+    thrust::tuple<complex,complex> vel_rough()
+    {
+      return roughness(dzdt);
+    }
+
     void update_histogram()
     {
       complex one_part_sol = one_particle_solution(h_Ba);
@@ -446,11 +535,14 @@ int one_system()
     unsigned int nlog = 1;
 
 
-    complex zcm2, zcm;
+    complex zcm2, zcm, velzcm2, velzcm;
     thrust::tuple<complex,complex> result = cuerda.rough();
     zcm2 = thrust::get<0>(result);
     zcm = thrust::get<1>(result);
     bool equilibrated = false;
+    
+    std::vector<REAL> velucm_vec;
+    std::vector<REAL> velphicm_vec;
     
     int n = 0;
     for (n = 0; ((zcm.imag()<2.0f*M_PI*100.0f) && n<steps); ++n) {
@@ -460,18 +552,30 @@ int one_system()
             result = cuerda.rough();
             zcm2 = thrust::get<0>(result);
             zcm = thrust::get<1>(result);
+            
+            result = cuerda.vel_rough();
+            velzcm2 = thrust::get<0>(result);
+            velzcm = thrust::get<1>(result);
+            
             outz
             << n*dt << " "
             << zcm.real() << " "
             << zcm.imag() << " "
             << zcm2.real() << " "
-            << zcm2.imag() << std::endl;
+            << zcm2.imag() << " " 
+            << velzcm.real() << " " 
+            << velzcm.imag() << " "
+            << velzcm2.real() << " " 
+            << velzcm2.imag() << " "
+            << std::endl;
             
             if(zcm.imag()>2*M_PI*5)
             {
               av_cm+=zcm;
               av_cm2+=zcm2;
               Nmes++;
+              velucm_vec.push_back(velzcm.real());
+              velphicm_vec.push_back(velzcm.imag());
             }
         }
         
@@ -509,6 +613,7 @@ int one_system()
         << "\n";
     }
     out.close();
+    
 
     result = cuerda.rough();
     zcm2 = thrust::get<0>(result);
@@ -516,6 +621,15 @@ int one_system()
     av_cm*=1.0f/Nmes;
     av_cm2*=1.0f/Nmes;
 
+    auto spectrum_velucm = compute_power_spectrum(velucm_vec);
+    auto spectrum_velphicm = compute_power_spectrum(velphicm_vec);
+    std::ofstream out_spectrum("spectrum_vel.dat");
+    for (int i = 0; i < spectrum_velucm.size(); ++i)
+        out_spectrum << i <<  "  " << spectrum_velucm[i] <<  "  " << spectrum_velphicm[i]  << "\n";
+    out_spectrum.close();
+    
+    
+    
     std::cout << "Run finished at step: " << n << ", distance traveled: " << zcm.imag() << std::endl;
 
     std::ofstream out_av("averages.dat");
