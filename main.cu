@@ -46,6 +46,7 @@ REAL L, dx, dt;
 int steps;
 complex alpha;
 REAL K, N_n;
+unsigned long seed = 42;
 
 /*const REAL L = h_N*1.0f;
 const REAL dx = L / h_N;
@@ -331,7 +332,7 @@ class Cuerda
       cufftPlan1d(&plan, h_N, CUFFT_C2C, 1);
       #endif
       
-      srand(42);
+      //srand(42);
       // Initial condition: z = cos(x)
       //thrust::host_vector<complex> z0(h_N);
       
@@ -676,6 +677,10 @@ int main(int argc, char **argv) {
     if(argc > 3)
     steps = atoi(argv[3]);
                 
+    if(argc > 4)
+    seed = atoi(argv[4]);
+    srand(seed);
+
     L = h_N*1.0f;
     dx = L / h_N;  
     dt = 3.0f;
