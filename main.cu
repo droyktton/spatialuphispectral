@@ -572,8 +572,8 @@ int one_system()
             
             if(zcm.imag()>2*M_PI*periodsphi*0.5)
             {
-              av_cm+=zcm;
-              av_cm2+=zcm2;
+              av_cm += zcm;
+              av_cm2 += zcm2;
               Nmes++;
               velucm_vec.push_back(velzcm.real());
               velphicm_vec.push_back(velzcm.imag());
