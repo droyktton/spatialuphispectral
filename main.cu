@@ -86,7 +86,7 @@ __global__ void compute_power_kernel_double(cufftDoubleComplex* freq_data, doubl
 
 // Templated wrapper
 template<typename T>
-std::vector<T> compute_power_spectrum(const std::vector<T>& input_signal) {
+void compute_power_spectrum(const std::vector<T>& input_signal) {
     static_assert(std::is_same<T, float>::value || std::is_same<T, double>::value,
                   "Only float or double precision supported");
 
@@ -129,15 +129,16 @@ std::vector<T> compute_power_spectrum(const std::vector<T>& input_signal) {
     cudaDeviceSynchronize();
 
     // Copy power to host
-    std::vector<T> power_spectrum(N_freq);
-    cudaMemcpy(power_spectrum.data(), d_power, sizeof(Real) * N_freq, cudaMemcpyDeviceToHost);
+    //std::vector<T> power_spectrum(N_freq);
+    Real *h_power = (Real *)(input_signal.data()); 
+    cudaMemcpy(h_power, d_power, sizeof(Real) * N_freq, cudaMemcpyDeviceToHost);
 
     // Cleanup
     cufftDestroy(plan);
     cudaFree(d_signal);
     cudaFree(d_power);
 
-    return power_spectrum;
+    //return power_spectrum;
 }
 
 
@@ -546,7 +547,7 @@ int one_system()
     std::vector<REAL> velphicm_vec;
     
     int n = 0;
-    for (n = 0; ((zcm.imag()<2.0f*M_PI*periodsphi) && n<steps); ++n) {
+    for (n = 0; ((fabs(zcm.imag())<2.0f*M_PI*periodsphi) && n<steps); ++n) {
         cuerda.step();
 
         if (n % 100 == 0) {
@@ -570,7 +571,7 @@ int one_system()
             << velzcm2.imag() << " "
             << std::endl;
             
-            if(zcm.imag()>2*M_PI*periodsphi*0.5)
+            if(fabs(zcm.imag())>2*M_PI*periodsphi*0.5 || n>steps*0.5)
             {
               av_cm += zcm;
               av_cm2 += zcm2;
@@ -580,7 +581,7 @@ int one_system()
             }
         }
         
-        if(zcm.imag()>2*M_PI*periodsphi*0.9 && !equilibrated)
+        if(fabs(zcm.imag())>2*M_PI*periodsphi*0.9 && !equilibrated)
         {
             std::cout << "Equilibration finished at step: " << n << ", distance traveled: " << zcm.imag() << std::endl;
             equilibrated = true;
@@ -622,16 +623,18 @@ int one_system()
     av_cm*=1.0f/Nmes;
     av_cm2*=1.0f/Nmes;
 
-    auto spectrum_velucm = compute_power_spectrum(velucm_vec);
-    auto spectrum_velphicm = compute_power_spectrum(velphicm_vec);
+/*
+    compute_power_spectrum(velucm_vec);
+    compute_power_spectrum(velphicm_vec);
     std::ofstream out_spectrum("spectrum_vel.dat");
-    for (int i = 0; i < spectrum_velucm.size(); ++i)
-        out_spectrum << i <<  "  " << spectrum_velucm[i] <<  "  " << spectrum_velphicm[i]  << "\n";
+    for (int i = 0; i < velucm_vec.size(); ++i)
+        out_spectrum << i <<  "  " << velucm_vec[i] <<  "  " << velphicm_vec[i]  << "\n";
     out_spectrum.close();
+*/    
     
-    
-    
-    std::cout << "Run finished at step: " << n << ", distance traveled: " << zcm.imag() << std::endl;
+    std::cout << "Run finished at step: " << n 
+    << ", distance traveled (phi,u): " << zcm.imag() << " " << zcm.real()
+    << std::endl;
 
     std::ofstream out_av("averages.dat");
 
@@ -649,6 +652,7 @@ int one_system()
     << " " << av_cm2.real() << " " << av_cm2.imag()
     << " " << zcm2.real() << " " << zcm2.imag()
     << " " << one_part_sol.real() << " " << one_part_sol.imag()
+    << " " << alpha.real()*N_n/2.0f 
     << std::endl;
 
     /*std::cout
@@ -691,15 +695,20 @@ int main(int argc, char **argv) {
     dt = 3.0f;
     //steps = 500000;
 
-    alpha=complex(0.27f, 0.0f);
+    //alpha=complex(0.27f, 0.0f);
+    alpha=complex(1.0f, 0.0f);
     K = 0.796f;
     N_n = 0.016f;
+    REAL Bw = alpha.real()*N_n/2.0f;
 
-    dt = (h_Ba>alpha.real()*N_n/2.0)?
-         (0.01/h_Ba):(0.01/(alpha.real()*N_n/2.0));
+    // so we can enter dimensionless field
+    h_Ba = h_Ba*Bw;
+    
+    dt = (h_Ba>Bw)?
+         (0.01/h_Ba):(0.01/Bw);
 
-    assert(h_Ba*dt < 0.05);
-    assert(alpha.real()*N_n*dt/2.0 < 0.05);
+    assert(h_Ba*dt < 0.015);
+    assert(Bw*dt < 0.015);
 
     std::ofstream out("parameters.dat");
     out << "N=" << h_N << std::endl;
