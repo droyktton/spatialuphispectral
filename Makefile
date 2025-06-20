@@ -24,7 +24,7 @@ spatialuphispectral: main.cu
 
 
 update_git:
-	git add *.cu Makefile README.md; git commit -m "program update"; git push
+	git add *.cu Makefile README.md *.gnu *.sh; git commit -m "program update"; git push
 
 clean:
 	rm spatialuphispectral
