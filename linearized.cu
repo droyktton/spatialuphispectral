@@ -13,13 +13,15 @@ void checkCudaError(cudaError_t err, const char* msg) {
 }
 
 const double alpha = 0.27;
-const double c = 1.0;
+const double C = 1.0;
 double h_H = 1.001;
 const double phi_start = 0.0;
 const double phi_end = M_PI;
 
 const double h = 0.001;
 const int steps = (phi_end - phi_start) / h;
+
+#define RK4
 
 //const int steps = 100000;
 //const double h = (phi_end - phi_start) / steps;
@@ -29,8 +31,38 @@ __device__ void rhs(double varphi, double Q, double Phi, double k, double& dQ, d
     double term1 = (k * k) / (alpha * denom);
     double term2 = 2.0 * cos(2.0 * varphi) / denom;
 
-    dQ = term1 * (c * Phi - alpha * c * Q) + (term2 * Phi / alpha);
-    dPhi = term1 * (-alpha * c * Phi - c * Q) - (term2 * Phi);
+    dQ = term1 * (C * Phi - alpha * C * Q) + (term2 * Phi / alpha);
+    dPhi = term1 * (-alpha * C * Phi - C * Q) - (term2 * Phi);
+}
+
+
+__device__ void ode_solver(double k, double& final_Q, double& final_Phi, double initial_Q, double initial_Phi, double H)
+{
+    #ifdef RK4
+    rk4_solver(k, final_Q, final_Phi, initial_Q, initial_Phi, H);
+    #else ifdef EULER
+    euler_solver(k, final_Q, final_Phi, initial_Q, initial_Phi, H);
+    #else ifdef RK6
+    rk6_solver(k, final_Q, final_Phi, initial_Q, initial_Phi, H);
+    #else ifdef RK45
+    rk45_solver(k, final_Q, final_Phi, initial_Q, initial_Phi, H);
+    #endif
+}
+
+__device__ void euler_solver(double k, double& final_Q, double& final_Phi, double initial_Q, double initial_Phi, double H) {
+    double Q = initial_Q, Phi = initial_Phi, varphi = phi_start;
+    double k1_Q, k1_Phi;
+
+    for (int i = 0; i < steps; ++i) {
+        rhs(varphi, Q, Phi, k, k1_Q, k1_Phi, H);
+
+        Q = Q + h * k1_Q;
+        Phi = Phi + h * k1_Phi;
+        varphi += h;
+    }
+
+    final_Q = Q;
+    final_Phi = Phi;
 }
 
 __device__ void rk4_solver(double k, double& final_Q, double& final_Phi, double initial_Q, double initial_Phi, double H) {
@@ -61,6 +93,128 @@ __device__ void rk4_solver(double k, double& final_Q, double& final_Phi, double 
     final_Q = Q;
     final_Phi = Phi;
 }
+
+__device__ void rk6_solver(double k, double& final_Q, double& final_Phi, double initial_Q, double initial_Phi, double H) {
+    double Q = initial_Q, Phi = initial_Phi, varphi = phi_start;
+
+    double a2 = 1.0 / 3.0, a3 = 2.0 / 3.0, a4 = 1.0, a5 = 0.5, a6 = 1.0;
+    double b1 = 1.0 / 6.0, b2 = 0.0, b3 = 0.0, b4 = 2.0 / 3.0, b5 = 1.0 / 6.0, b6 = 0.0;
+
+    double k_Q[6], k_Phi[6];
+    double Qt, Phit;
+
+    for (int i = 0; i < steps; ++i) {
+        rhs(varphi, Q, Phi, k, k_Q[0], k_Phi[0]);
+
+        Qt = Q + h * a2 * k_Q[0];
+        Phit = Phi + h * a2 * k_Phi[0];
+        rhs(varphi + h * a2, Qt, Phit, k, k_Q[1], k_Phi[1]);
+
+        Qt = Q + h * a3 * k_Q[1];
+        Phit = Phi + h * a3 * k_Phi[1];
+        rhs(varphi + h * a3, Qt, Phit, k, k_Q[2], k_Phi[2]);
+
+        Qt = Q + h * a4 * k_Q[2];
+        Phit = Phi + h * a4 * k_Phi[2];
+        rhs(varphi + h * a4, Qt, Phit, k, k_Q[3], k_Phi[3]);
+
+        Qt = Q + h * a5 * k_Q[3];
+        Phit = Phi + h * a5 * k_Phi[3];
+        rhs(varphi + h * a5, Qt, Phit, k, k_Q[4], k_Phi[4]);
+
+        Qt = Q + h * a6 * k_Q[4];
+        Phit = Phi + h * a6 * k_Phi[4];
+        rhs(varphi + h * a6, Qt, Phit, k, k_Q[5], k_Phi[5]);
+
+        Q += h * (b1 * k_Q[0] + b4 * k_Q[3] + b5 * k_Q[4]);
+        Phi += h * (b1 * k_Phi[0] + b4 * k_Phi[3] + b5 * k_Phi[4]);
+
+        varphi += h;
+    }
+
+    final_Q = Q;
+    final_Phi = Phi;
+}
+
+__device__ void rk45_solver(
+    double k, double& final_Q, double& final_Phi,
+    double initial_Q, double initial_Phi, double H
+) {
+    double Q = initial_Q, Phi = initial_Phi;
+    double varphi = phi_start;
+
+    double k_Q[7], k_Phi[7];
+    double Qt, Phit;
+
+    for (int i = 0; i < steps; ++i) {
+        // c values (nodes)
+        double c2 = 1.0 / 5.0;
+        double c3 = 3.0 / 10.0;
+        double c4 = 4.0 / 5.0;
+        double c5 = 8.0 / 9.0;
+        double c6 = 1.0;
+        double c7 = 1.0;
+
+        // a coefficients
+        // Stage 1 (no a's)
+        rhs(varphi, Q, Phi, k, k_Q[0], k_Phi[0]);
+
+        // Stage 2
+        Qt = Q + h * (1.0 / 5.0) * k_Q[0];
+        Phit = Phi + h * (1.0 / 5.0) * k_Phi[0];
+        rhs(varphi + c2 * h, Qt, Phit, k, k_Q[1], k_Phi[1]);
+
+        // Stage 3
+        Qt = Q + h * (3.0/40.0 * k_Q[0] + 9.0/40.0 * k_Q[1]);
+        Phit = Phi + h * (3.0/40.0 * k_Phi[0] + 9.0/40.0 * k_Phi[1]);
+        rhs(varphi + c3 * h, Qt, Phit, k, k_Q[2], k_Phi[2]);
+
+        // Stage 4
+        Qt = Q + h * (44.0/45.0 * k_Q[0] - 56.0/15.0 * k_Q[1] + 32.0/9.0 * k_Q[2]);
+        Phit = Phi + h * (44.0/45.0 * k_Phi[0] - 56.0/15.0 * k_Phi[1] + 32.0/9.0 * k_Phi[2]);
+        rhs(varphi + c4 * h, Qt, Phit, k, k_Q[3], k_Phi[3]);
+
+        // Stage 5
+        Qt = Q + h * (19372.0/6561.0 * k_Q[0] - 25360.0/2187.0 * k_Q[1]
+                   + 64448.0/6561.0 * k_Q[2] - 212.0/729.0 * k_Q[3]);
+        Phit = Phi + h * (19372.0/6561.0 * k_Phi[0] - 25360.0/2187.0 * k_Phi[1]
+                   + 64448.0/6561.0 * k_Phi[2] - 212.0/729.0 * k_Phi[3]);
+        rhs(varphi + c5 * h, Qt, Phit, k, k_Q[4], k_Phi[4]);
+
+        // Stage 6
+        Qt = Q + h * (9017.0/3168.0 * k_Q[0] - 355.0/33.0 * k_Q[1]
+                   + 46732.0/5247.0 * k_Q[2] + 49.0/176.0 * k_Q[3]
+                   - 5103.0/18656.0 * k_Q[4]);
+        Phit = Phi + h * (9017.0/3168.0 * k_Phi[0] - 355.0/33.0 * k_Phi[1]
+                   + 46732.0/5247.0 * k_Phi[2] + 49.0/176.0 * k_Phi[3]
+                   - 5103.0/18656.0 * k_Phi[4]);
+        rhs(varphi + c6 * h, Qt, Phit, k, k_Q[5], k_Phi[5]);
+
+        // Stage 7
+        Qt = Q + h * (35.0/384.0 * k_Q[0] + 0.0 * k_Q[1] + 500.0/1113.0 * k_Q[2]
+                   + 125.0/192.0 * k_Q[3] - 2187.0/6784.0 * k_Q[4]
+                   + 11.0/84.0 * k_Q[5]);
+        Phit = Phi + h * (35.0/384.0 * k_Phi[0] + 0.0 * k_Phi[1] + 500.0/1113.0 * k_Phi[2]
+                   + 125.0/192.0 * k_Phi[3] - 2187.0/6784.0 * k_Phi[4]
+                   + 11.0/84.0 * k_Phi[5]);
+        rhs(varphi + c7 * h, Qt, Phit, k, k_Q[6], k_Phi[6]);
+
+        // 5th-order solution (you can also compute 4th for adaptive step control)
+        Q += h * (35.0/384.0 * k_Q[0] + 500.0/1113.0 * k_Q[2]
+                + 125.0/192.0 * k_Q[3] - 2187.0/6784.0 * k_Q[4]
+                + 11.0/84.0 * k_Q[5]);
+
+        Phi += h * (35.0/384.0 * k_Phi[0] + 500.0/1113.0 * k_Phi[2]
+                + 125.0/192.0 * k_Phi[3] - 2187.0/6784.0 * k_Phi[4]
+                + 11.0/84.0 * k_Phi[5]);
+
+        varphi += h;
+    }
+
+    final_Q = Q;
+    final_Phi = Phi;
+}
+
 
 __device__ void eigenvalues_magnitudes_2x2(double a, double b, double c, double d, double* mag1, double* mag2) {
     double trace = a + d;
@@ -103,10 +257,18 @@ __global__ void solve_all_grid(
     	double a, b, c, d;
     
     	Q_ini = 1.0; Phi_ini = 0.0;
-            rk4_solver(k, a, b, Q_ini, Phi_ini, H);
+        #ifdef RK4
+        rk4_solver(k, a, b, Q_ini, Phi_ini, H);
+    	#else
+        euler_solver(k, a, b, Q_ini, Phi_ini, H);
+        #endif   
     	
     	Q_ini = 0.0; Phi_ini = 1.0;
-            rk4_solver(k, c, d, Q_ini, Phi_ini, H);
+        #ifdef RK4
+        rk4_solver(k, c, d, Q_ini, Phi_ini, H);
+    	#else
+        euler_solver(k, c, d, Q_ini, Phi_ini, H);
+        #endif   
     
     	double lambda1, lambda2;
     	eigenvalues_magnitudes_2x2(a, b, c, d, &lambda1, &lambda2);
@@ -161,7 +323,15 @@ int main(int argc, char **argv) {
     std::cout << "Block size: " << blockSize.x << "x" << blockSize.y << ", Number of blocks: " << numBlocks.x << "x" << numBlocks.y << std::endl;
     printf("Starting computation...\n");
     
-    // Launch the kernel
+ // 1. Create events
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    // 2. Record start
+    cudaEventRecord(start);
+    
+    // 3. Launch the kernel
     solve_all_grid<<<numBlocks, blockSize>>>(
                                             thrust::raw_pointer_cast(d_k_vals.data()),
                                             thrust::raw_pointer_cast(d_H_vals.data()),
@@ -169,6 +339,22 @@ int main(int argc, char **argv) {
                                             thrust::raw_pointer_cast(d_Phi_out.data()), Nk, Nh
                                         );
     checkCudaError(cudaGetLastError(), "Kernel launch failed");
+    
+    // 4. Record stop
+    cudaEventRecord(stop);
+
+    // 5. Wait for the kernel to finish
+    cudaEventSynchronize(stop);
+
+    // 6. Compute elapsed time
+    float milliseconds = 0;
+    cudaEventElapsedTime(&milliseconds, start, stop);
+
+    std::cout << "Kernel execution time: " << milliseconds << " ms\n";
+    
+    // 7. Destroy events
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);    
 
     thrust::copy(d_Q_out.begin(),d_Q_out.end(), h_Q_out.begin());
     thrust::copy(d_Phi_out.begin(),d_Phi_out.end(), h_Phi_out.begin());
