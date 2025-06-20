@@ -36,18 +36,6 @@ __device__ void rhs(double varphi, double Q, double Phi, double k, double& dQ, d
 }
 
 
-__device__ void ode_solver(double k, double& final_Q, double& final_Phi, double initial_Q, double initial_Phi, double H)
-{
-    #ifdef RK4
-    rk4_solver(k, final_Q, final_Phi, initial_Q, initial_Phi, H);
-    #else ifdef EULER
-    euler_solver(k, final_Q, final_Phi, initial_Q, initial_Phi, H);
-    #else ifdef RK6
-    rk6_solver(k, final_Q, final_Phi, initial_Q, initial_Phi, H);
-    #else ifdef RK45
-    rk45_solver(k, final_Q, final_Phi, initial_Q, initial_Phi, H);
-    #endif
-}
 
 __device__ void euler_solver(double k, double& final_Q, double& final_Phi, double initial_Q, double initial_Phi, double H) {
     double Q = initial_Q, Phi = initial_Phi, varphi = phi_start;
@@ -104,30 +92,30 @@ __device__ void rk6_solver(double k, double& final_Q, double& final_Phi, double 
     double Qt, Phit;
 
     for (int i = 0; i < steps; ++i) {
-        rhs(varphi, Q, Phi, k, k_Q[0], k_Phi[0]);
+        rhs(varphi, Q, Phi, k, k_Q[0], k_Phi[0],H);
 
         Qt = Q + h * a2 * k_Q[0];
         Phit = Phi + h * a2 * k_Phi[0];
-        rhs(varphi + h * a2, Qt, Phit, k, k_Q[1], k_Phi[1]);
+        rhs(varphi + h * a2, Qt, Phit, k, k_Q[1], k_Phi[1],H);
 
         Qt = Q + h * a3 * k_Q[1];
         Phit = Phi + h * a3 * k_Phi[1];
-        rhs(varphi + h * a3, Qt, Phit, k, k_Q[2], k_Phi[2]);
+        rhs(varphi + h * a3, Qt, Phit, k, k_Q[2], k_Phi[2],H);
 
         Qt = Q + h * a4 * k_Q[2];
         Phit = Phi + h * a4 * k_Phi[2];
-        rhs(varphi + h * a4, Qt, Phit, k, k_Q[3], k_Phi[3]);
+        rhs(varphi + h * a4, Qt, Phit, k, k_Q[3], k_Phi[3],H);
 
         Qt = Q + h * a5 * k_Q[3];
         Phit = Phi + h * a5 * k_Phi[3];
-        rhs(varphi + h * a5, Qt, Phit, k, k_Q[4], k_Phi[4]);
+        rhs(varphi + h * a5, Qt, Phit, k, k_Q[4], k_Phi[4],H);
 
         Qt = Q + h * a6 * k_Q[4];
         Phit = Phi + h * a6 * k_Phi[4];
-        rhs(varphi + h * a6, Qt, Phit, k, k_Q[5], k_Phi[5]);
+        rhs(varphi + h * a6, Qt, Phit, k, k_Q[5], k_Phi[5],H);
 
         Q += h * (b1 * k_Q[0] + b4 * k_Q[3] + b5 * k_Q[4]);
-        Phi += h * (b1 * k_Phi[0] + b4 * k_Phi[3] + b5 * k_Phi[4]);
+        Phi += h * (b1 * k_Phi[0] + b4 * k_Phi[3] + b5 * k_Phi[4],H);
 
         varphi += h;
     }
@@ -215,6 +203,20 @@ __device__ void rk45_solver(
     final_Phi = Phi;
 }
 
+__device__ void ode_solver(double k, double& final_Q, double& final_Phi, double initial_Q, double initial_Phi, double H)
+{
+    #ifdef RK4
+    rk4_solver(k, final_Q, final_Phi, initial_Q, initial_Phi, H);
+    #elif defined(EULER)
+    euler_solver(k, final_Q, final_Phi, initial_Q, initial_Phi, H);
+    #elif defined(RK6)
+    rk6_solver(k, final_Q, final_Phi, initial_Q, initial_Phi, H);
+    #elif defined(RK45)
+    rk45_solver(k, final_Q, final_Phi, initial_Q, initial_Phi, H);
+    #endif
+}
+
+
 
 __device__ void eigenvalues_magnitudes_2x2(double a, double b, double c, double d, double* mag1, double* mag2) {
     double trace = a + d;
@@ -257,18 +259,10 @@ __global__ void solve_all_grid(
     	double a, b, c, d;
     
     	Q_ini = 1.0; Phi_ini = 0.0;
-        #ifdef RK4
-        rk4_solver(k, a, b, Q_ini, Phi_ini, H);
-    	#else
-        euler_solver(k, a, b, Q_ini, Phi_ini, H);
-        #endif   
+        ode_solver(k, a, b, Q_ini, Phi_ini, H);
     	
     	Q_ini = 0.0; Phi_ini = 1.0;
-        #ifdef RK4
-        rk4_solver(k, c, d, Q_ini, Phi_ini, H);
-    	#else
-        euler_solver(k, c, d, Q_ini, Phi_ini, H);
-        #endif   
+        ode_solver(k, c, d, Q_ini, Phi_ini, H);
     
     	double lambda1, lambda2;
     	eigenvalues_magnitudes_2x2(a, b, c, d, &lambda1, &lambda2);
