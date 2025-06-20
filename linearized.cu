@@ -18,7 +18,7 @@ double h_H = 1.001;
 const double phi_start = 0.0;
 const double phi_end = M_PI;
 
-const double h = 0.001;
+const double h = 0.0001;
 const int steps = (phi_end - phi_start) / h;
 
 //const int steps = 100000;
