@@ -697,8 +697,8 @@ int main(int argc, char **argv) {
 
     //alpha=complex(0.27f, 0.0f);
     alpha=complex(1.0f, 0.0f);
-    K = 0.796f;
-    N_n = 0.016f;
+    K = 1.0; //0.796f;
+    N_n = 1.0; //0.016f;
     REAL Bw = alpha.real()*N_n/2.0f;
 
     // so we can enter dimensionless field
