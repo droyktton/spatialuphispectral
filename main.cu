@@ -450,8 +450,12 @@ class Cuerda
       std::cout << "Computing Sq... z_hat.size()=" << z_hat.size() << std::flush;
       #endif
       
+      int maxq = h_N/2;
+      if(h_N>8192) maxq = 4096;
+      
       int istep=1;
-      for(int i = 1; i < h_N/2; i+=istep) {
+      //for(int i = 1; i < h_N/2; i+=istep) {
+      for(int i = 1; i < maxq; i+=istep) {
         complex z_hat_i = z_hat[i];
         complex z_hat_i_neg = z_hat[(h_N-i)];
         
@@ -463,10 +467,10 @@ class Cuerda
         
         REAL Squ = zu.real() * zu.real() + zu.imag() * zu.imag();
         REAL Sqphi = zphi.real() * zphi.real() + zphi.imag() * zphi.imag();
-        out << 2*M_PI*i/L << " " << Squ << " " << Sqphi << " " << t << std::endl;
+        out << 2*M_PI*i/L << " " << Squ/L << " " << Sqphi/L << " " << t << std::endl;
         
-        if(i==2048) istep=2;
-        if(i==8192) istep=4;
+        //if(i==2048) istep=2;
+        //if(i==8192) istep=64;
       }
       #ifdef DEBUG 
       std::cout << " done printing" << std::flush << std::endl;
@@ -730,7 +734,7 @@ int main(int argc, char **argv) {
 
     //alpha=complex(0.27f, 0.0f);
     alpha=complex(1.00f, 0.0f);
-    K = 0.1; //0.796f;
+    K = 0.5; //0.796f;
     N_n = 1.0; //0.016f;
     REAL Bw = alpha.real()*N_n/2.0f;
 
@@ -738,7 +742,7 @@ int main(int argc, char **argv) {
     h_Ba = h_Ba*Bw;
     
     dt = (h_Ba>Bw)?
-         (0.01/h_Ba):(0.01/Bw);
+         (0.1/h_Ba):(0.1/Bw);
 
     //assert(h_Ba*dt < 0.015);
     //assert(Bw*dt < 0.015);
