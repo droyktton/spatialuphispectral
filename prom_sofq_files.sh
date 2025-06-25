@@ -8,20 +8,27 @@ samples=$(ls $list | wc -l)
 
 echo "samples="$samples
 
-paste $list | awk -v nf=$nf '{\
-	for(j=0;j<nf;j++)
+echo $list
+
+paste $list > zzz
+
+gawk -v nf="$nf" '{
+	for(j=1;j<=nf;j++)
 	{
-		acum[j]=0;
+		acum[j]=0.0;
+		count[j]=0;
 	}; 
-	for(i=0;i<NF;i++){
-		acum[i%nf]+=$i
+	for(i=1;i<=NF;i++)
+	{
+		acum[(i-1)%nf+1]+=$i;
+		count[(i-1)%nf+1]++;
 	}; 
-	if(NF>0){
-		print acum*1.0/NF; else print;}' 
+	if(NF>0)
+	{
+		for(j=1;j<=nf;j++){
+			printf("%1.2f ",acum[j]/count[j]);
+		}
+		printf("\n");
 	} 
-> "sofq_"$samples"samples.dat"
+}' zzz
 
-file="sofq_"$samples"samples.dat"
-echo $file
-
-#gnuplot -p -e "set term png; set out 'sofq.png';set logs; plot for[i=0:7] '$file' index i u 0:1 w lp t ''"
