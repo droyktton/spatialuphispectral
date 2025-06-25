@@ -25,7 +25,7 @@ istep=1
 
 # sin rescaleo
 set yrange [:]
-set xrange [2e-4:pi]
+set xrange [1e-5:0.1]
 set size 1,0.5
 set origin 0,0.5
 set title "Sin rescaleo"
