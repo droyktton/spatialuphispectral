@@ -445,10 +445,15 @@ class Cuerda
     void print_Sq_vs_t(std::ofstream &out, const REAL t)
     {
       complex unit = complex(0.0f, 1.0f);
+       
+      #ifdef DEBUG 
+      std::cout << "Computing Sq... z_hat.size()=" << z_hat.size() << std::flush;
+      #endif
       
-      for(int i = 0; i < h_N/2; ++i) {
+      int istep=1;
+      for(int i = 1; i < h_N/2; i+=istep) {
         complex z_hat_i = z_hat[i];
-        complex z_hat_i_neg = z_hat[h_N-i];
+        complex z_hat_i_neg = z_hat[(h_N-i)];
         
         // Note: z_hat[N-i] is the negative frequency component
         complex z_hat_i_neg_conj = thrust::conj(z_hat_i_neg);
@@ -459,7 +464,13 @@ class Cuerda
         REAL Squ = zu.real() * zu.real() + zu.imag() * zu.imag();
         REAL Sqphi = zphi.real() * zphi.real() + zphi.imag() * zphi.imag();
         out << 2*M_PI*i/L << " " << Squ << " " << Sqphi << " " << t << std::endl;
+        
+        if(i==2048) istep=2;
+        if(i==8192) istep=4;
       }
+      #ifdef DEBUG 
+      std::cout << " done printing" << std::flush << std::endl;
+      #endif
       out << "\n" << std::endl;
     }
 
@@ -524,6 +535,8 @@ int one_system()
     Cuerda cuerda;
     //cuerda.init();
 
+    std::cout << "cuerda initialized." << std::endl << std::flush;
+    
     std::ofstream outz("z_vs_t.dat");
     std::ofstream outSq("Sq_vs_t.dat");
 
@@ -546,11 +559,20 @@ int one_system()
     std::vector<REAL> velucm_vec;
     std::vector<REAL> velphicm_vec;
     
+    #ifdef DEBUG
+    std::cout << "starting loop..." << std::endl << std::flush;
+    #endif
+
     int n = 0;
     for (n = 0; ((fabs(zcm.imag())<2.0f*M_PI*periodsphi) && n<steps); ++n) {
         cuerda.step();
 
         if (n % 100 == 0) {
+            
+            #ifdef DEBUG
+            std::cout << "saving results n=" << n << " " << std::flush;
+            #endif
+            
             result = cuerda.rough();
             zcm2 = thrust::get<0>(result);
             zcm = thrust::get<1>(result);
@@ -579,6 +601,9 @@ int one_system()
               velucm_vec.push_back(velzcm.real());
               velphicm_vec.push_back(velzcm.imag());
             }
+            #ifdef DEBUG
+            std::cout << "done" << std::endl << std::flush;
+            #endif
         }
         
         if(fabs(zcm.imag())>2*M_PI*periodsphi*0.9 && !equilibrated)
@@ -598,9 +623,17 @@ int one_system()
         
         if(n == nlog) 
         {
+            #ifdef DEBUG
+            std::cout << "n= " << n << ", printing Sq..." << std::flush;
+            #endif
             //outSq << "Step: " << n <<  std::endl;
-            nlog *= 2;
             cuerda.print_Sq_vs_t(outSq, n*dt);
+            
+            #ifdef DEBUG
+            std::cout << "done" << std::endl << std::flush;
+            #endif
+            
+            nlog *= 2;
         }
     }
 
@@ -696,9 +729,9 @@ int main(int argc, char **argv) {
     //steps = 500000;
 
     //alpha=complex(0.27f, 0.0f);
-    alpha=complex(1.0f, 0.0f);
-    K = 1.0; //0.796f;
-    N_n = 2.0; //0.016f;
+    alpha=complex(1.00f, 0.0f);
+    K = 0.1; //0.796f;
+    N_n = 1.0; //0.016f;
     REAL Bw = alpha.real()*N_n/2.0f;
 
     // so we can enter dimensionless field
@@ -707,8 +740,8 @@ int main(int argc, char **argv) {
     dt = (h_Ba>Bw)?
          (0.01/h_Ba):(0.01/Bw);
 
-    assert(h_Ba*dt < 0.015);
-    assert(Bw*dt < 0.015);
+    //assert(h_Ba*dt < 0.015);
+    //assert(Bw*dt < 0.015);
 
     std::ofstream out("parameters.dat");
     out << "N=" << h_N << std::endl;

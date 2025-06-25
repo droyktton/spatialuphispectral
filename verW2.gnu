@@ -3,6 +3,8 @@ set terminal qt 0 font "Sans,9" size 800,900
 
 set key left bottom
 
+set logs
+
 tmax=100000
 tmin=5000
 wmin=1.0
