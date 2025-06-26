@@ -1,7 +1,10 @@
 unset multi
 
+
+#file='Sq_vs_t.dat'
+
 set logs; 
-smo = 5000.
+smo = 20000.
 sm(x)=int(x*smo)/(smo+0.); 
 #sm(x)=exp(int(log(x)*smo)/(smo+0.)); 
 
@@ -17,7 +20,7 @@ set key bot left
 #ie=25
 
 #universality2
-is=14
+is=13
 ie=22
 istep=1
 
@@ -32,14 +35,14 @@ set title "Sin rescaleo"
 set xlabel "q"
 set ylabel "S(q,t)"
 z=1000000.0; 
-plot for[i=11:ie:istep] 'Sq_vs_t.dat' u \
+plot for[i=1:ie:istep] file u \
 (t=$4, sm($1)*$4**(1./z)):(t=$4, $2/$4**(2./z)) index i \
 w l t sprintf("t/dt=%d",2**i) smooth un,\
 50000./x**2
 
 
 
-qmax=0.05
+qmax=0.007
 Sqmin=1e-5
 Sqmax=1e5
 
@@ -53,7 +56,7 @@ set origin 0,0
 set title "Con rescaleo z=1.5"
 set xlabel "q t^{1/z}"
 set ylabel "S(q,t)/t^{2/z}"
-plot for[i=is:ie:istep] 'Sq_vs_t.dat' u (t=$4, sm($1)*$4**(1./z)):(($1<qmax && $2>Sqmin)?($2/$4**(2./z)):(1./0)) \
+plot for[i=is:ie:istep] file u (t=$4, sm($1)*$4**(1./z)):(($1<qmax && $2>Sqmin)?($2/$4**(2./z)):(1./0)) \
 index i t '' smooth un w lp,\
 1000/x**2
 
@@ -68,7 +71,7 @@ set origin 0.5,0
 set title "Con rescaleo z=2.0"
 set xlabel "q t^{1/z}"
 set ylabel "S(q,t)/t^{2/z}"
-plot for[i=is:ie:istep] 'Sq_vs_t.dat' u (t=$4, sm($1)*$4**(1./z)):(($1<qmax && $2>Sqmin)?($2/$4**(2./z)):(1./0)) \
+plot for[i=is:ie:istep] file u (t=$4, sm($1)*$4**(1./z)):(($1<qmax && $2>Sqmin)?($2/$4**(2./z)):(1./0)) \
 index i t '' smooth un  w lp,\
 1000/x**2
 
