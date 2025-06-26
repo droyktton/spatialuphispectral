@@ -4,7 +4,7 @@ unset multi
 #file='Sq_vs_t.dat'
 
 set logs; 
-smo = 20000.
+smo = 100000.
 sm(x)=int(x*smo)/(smo+0.); 
 #sm(x)=exp(int(log(x)*smo)/(smo+0.)); 
 
@@ -35,9 +35,14 @@ set title "Sin rescaleo"
 set xlabel "q"
 set ylabel "S(q,t)"
 z=1000000.0; 
-plot for[i=1:ie:istep] file u \
-(t=$4, sm($1)*$4**(1./z)):(t=$4, $2/$4**(2./z)) index i \
-w l t sprintf("t/dt=%d",2**i) smooth un,\
+#set colorbox
+#unset log cb      # ensure color axis (colorbar) is linear
+
+plot for[i=10:ie:istep] file u \
+(t=$4, sm($1)*$4**(1./z)):($2/$4**(2./z)) index i \
+smooth un w lp lc i t sprintf("t/dt=%d",2**i),\
+#for[i=1:ie:istep] file u \
+#(t=$4, sm($1)*$4**(1./z)):(t=$4, $2/$4**(2./z)):(sqrt($6/$9)):($4) index i  smooth un t '' w error,\
 50000./x**2
 
 
