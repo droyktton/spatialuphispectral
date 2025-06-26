@@ -33,7 +33,7 @@ gawk -v nf="$nf" '{
 		}
 		for(j=1;j<=nf;j++){
 			media=acum[j-1]/count[j-1];
-			var=sqrt(acum2[j-1]/count[j-1]-media*media)/sqrt(count[j-1]);
+			var=acum2[j-1]/count[j-1]-media*media);
 			printf("%f ",var);
 		}
 		printf("%d \n", count[0]);
