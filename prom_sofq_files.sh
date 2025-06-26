@@ -25,18 +25,19 @@ gawk -v nf="$nf" '{
 		acum2[(i-1)%nf]+=$i*$i;
 		count[(i-1)%nf]++;
 	}; 
-	if(NF>0)
+	if(NF>nf)
 	{
 		for(j=1;j<=nf;j++){
 			media=acum[j-1]/count[j-1];
-			printf("%1.2f ",media);
+			printf("%f ",media);
 		}
 		for(j=1;j<=nf;j++){
 			media=acum[j-1]/count[j-1];
-			var=acum2[j-1]/count[j-1]-media*media;			
-			printf("%1.2f ",var);
+			var=sqrt(acum2[j-1]/count[j-1]-media*media)/sqrt(count[j-1]);
+			printf("%f ",var);
 		}
-		printf("\n");
-	} 
+		printf("%d \n", count[0]);
+	}
+	if(NF==0) printf("\n");
 }' zzz
 

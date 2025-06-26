@@ -5,7 +5,7 @@ smo = 5000.
 sm(x)=int(x*smo)/(smo+0.); 
 #sm(x)=exp(int(log(x)*smo)/(smo+0.)); 
 
-set terminal qt 0 font "Sans,9" size 600,700
+set terminal qt 0 font "Sans,9" size 700,800
 
 
 set multi
@@ -24,8 +24,8 @@ istep=1
 
 
 # sin rescaleo
-set yrange [:]
-set xrange [1e-5:0.1]
+set yrange [1:1e6]
+set xrange [2e-4:0.1]
 set size 1,0.5
 set origin 0,0.5
 set title "Sin rescaleo"
