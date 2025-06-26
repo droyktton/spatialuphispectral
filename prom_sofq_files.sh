@@ -25,7 +25,7 @@ gawk -v nf="$nf" '{
 		acum2[(i-1)%nf]+=$i*$i;
 		count[(i-1)%nf]++;
 	}; 
-	if(NF>nf)
+	if(NF>0)
 	{
 		for(j=1;j<=nf;j++){
 			media=acum[j-1]/count[j-1];

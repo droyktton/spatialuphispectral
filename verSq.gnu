@@ -17,8 +17,8 @@ set key bot left
 #ie=25
 
 #universality2
-is=13
-ie=25
+is=14
+ie=22
 istep=1
 
 
