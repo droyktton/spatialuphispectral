@@ -733,16 +733,16 @@ int main(int argc, char **argv) {
     //steps = 500000;
 
     //alpha=complex(0.27f, 0.0f);
-    alpha=complex(1.00f, 0.0f);
-    K = 0.5; //0.796f;
-    N_n = 1.0; //0.016f;
+    alpha=complex(0.27f, 0.0f);
+    K = 0.796; //0.796f; // KPZ poner 0.5
+    N_n = 0.015; //0.016f; //KPZ poner 1
     REAL Bw = alpha.real()*N_n/2.0f;
 
     // so we can enter dimensionless field
     h_Ba = h_Ba*Bw;
     
     dt = (h_Ba>Bw)?
-         (0.1/h_Ba):(0.1/Bw);
+         (0.01/h_Ba):(0.01/Bw); //KPZ poner 0.1
 
     //assert(h_Ba*dt < 0.015);
     //assert(Bw*dt < 0.015);
@@ -761,6 +761,7 @@ int main(int argc, char **argv) {
     out << "EPSILON=" << EPSILON << std::endl;
     out << "periodsphi=" << periodsphi << std::endl;
     out << "seed=" << seed << std::endl;
+    out << "Bw=" << Bw << std::endl;
     out.close();
     
     #ifndef TWO_SYSTEMS
