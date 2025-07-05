@@ -543,6 +543,10 @@ int one_system()
     
     std::ofstream outz("z_vs_t.dat");
     std::ofstream outSq("Sq_vs_t.dat");
+    
+    #ifdef BLOCHLINES
+    std::ofstream bloch_out("bloch.dat");
+    #endif
 
     long Nmes=0;
     complex av_cm=complex(0.0f, 0.0f);
@@ -639,6 +643,25 @@ int one_system()
             
             nlog *= 2;
         }
+        
+        #ifdef BLOCHLINES
+        if(n%BLOCHLINES==0){
+            thrust::host_vector<complex> z_host = cuerda.z;
+            for (int i = 0; i < h_N; ++i) {
+                double deriv = (z_host[(i+1)%h_N].imag()-z_host[(i-1+h_N)%h_N].imag())/(2.0f*dx);
+                double deriv2 = (z_host[(i+1)%h_N].imag()+z_host[(i-1+h_N)%h_N].imag()-2.0*z_host[i].imag())/(dx*dx);
+                bloch_out
+                << n << " "
+                << i * dx << " "
+                << z_host[i].imag() << " "
+                << (deriv*deriv) << " "
+                << (deriv2*deriv2) << " "
+                << "\n";
+            }
+            bloch_out << "\n";
+            bloch_out.flush();
+        }
+        #endif
     }
 
     // Save final result
@@ -725,17 +748,20 @@ int main(int argc, char **argv) {
     periodsphi = 100; // Default value
     if(argc > 5)
     periodsphi = atoi(argv[5]);
-
     
     L = h_N*1.0f;
     dx = L / h_N;  
     dt = 3.0f;
     //steps = 500000;
 
-    //alpha=complex(0.27f, 0.0f);
+    //alpha=complex(0.27f, 0.0f); //normal
     alpha=complex(0.27f, 0.0f);
+    if(argc > 6)
+    alpha = complex(atof(argv[6]),0.0f);
+
+    
     K = 0.796; //0.796f; // KPZ poner 0.5
-    N_n = 0.015; //0.016f; //KPZ poner 1
+    N_n = 1.0; //0.016f; //KPZ poner 1
     REAL Bw = alpha.real()*N_n/2.0f;
 
     // so we can enter dimensionless field
