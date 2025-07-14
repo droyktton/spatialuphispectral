@@ -29,6 +29,9 @@ typedef float REAL;
 
 using complex = thrust::complex<REAL>;
 
+#ifndef NBINS
+#define NBINS 100
+#endif
 
 /*#ifndef N
 #define N 32768
@@ -61,8 +64,6 @@ const REAL N_n = 0.016f;
 #ifndef EPSILON
 #define EPSILON 0.0001f
 #endif
-
-#define NBINS 100
 
 
 // CUDA kernel for computing power spectrum (float)
@@ -153,17 +154,16 @@ complex one_particle_solution(REAL h){
 }
 
 
-__global__ void histogramKernel(const float* data, int* bins, int N, int Nbins, float xmin, float xmax) {
+__global__ void histogramKernel(const complex* data, int* bins, int N, int Nbins, float xmin, float xmax, float mean, float var) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < N) {
-        float x = data[idx];
-        int bin = int((x - xmin) / (xmax - xmin) * Nbins);
+        float x = (data[idx].real()-mean)/sqrt(var);
+        int bin = int(((x - xmin) / (xmax - xmin)) * Nbins);
         if (bin >= 0 && bin < Nbins) {
             atomicAdd(&bins[bin], 1);
         }
     }
 }
-
 __global__ void init_wave_numbers(complex* L_k, REAL K, REAL L) {
     int i = threadIdx.x + blockDim.x * blockIdx.x;
     if (i < N) {
@@ -241,6 +241,9 @@ class Cuerda
       //zaux.resize(N);
       histogram_udot.resize(NBINS);
       histogram_phidot.resize(NBINS);
+      // height distribution
+	  pdf_u.resize(NBINS);
+	  thrust::fill(pdf_u.begin(),pdf_u.end(), 0);
 
       init();
 
@@ -429,6 +432,37 @@ class Cuerda
       return roughness(z);
     }
     
+    void print_pdf_u(std::ofstream &out, REAL t)
+    {
+        thrust::fill(pdf_u.begin(),pdf_u.end(), 0);
+        
+        thrust::tuple<complex,complex> roughz = roughness(z);
+        
+        complex zcmu2 = thrust::get<0>(roughz);
+        complex zcmu = thrust::get<1>(roughz);
+
+        REAL cmu = zcmu.real();
+        REAL cmu2 = zcmu2.real();
+
+        complex *raw_z = thrust::raw_pointer_cast(&z[0]); 
+        int *raw_pdf_u = thrust::raw_pointer_cast(&pdf_u[0]); 
+        int Ndata = z.size();
+
+        int threadsPerBlock = 256;
+        int blocksPerGrid = (Ndata + threadsPerBlock - 1) / threadsPerBlock;
+        float max = 4.0; float min = -4.0;
+        histogramKernel<<<blocksPerGrid, threadsPerBlock>>>(raw_z, raw_pdf_u, Ndata, NBINS, min, max, cmu, cmu2);
+
+        thrust::host_vector<int> h_pdf_u(pdf_u);
+
+        //printf("Ndata=%d NBINS=%d min=%f max=%f cmu=%f\n", Ndata, NBINS, min, max, cmu);
+
+        for(int i=0;i<NBINS;i++)
+        out << i << " " << min+i*(max-min)/NBINS << " " << h_pdf_u[i] << " " << t << "\n";
+        out << "\n" << std::endl;
+    }
+    
+    
     thrust::tuple<complex,complex> vel_rough()
     {
       return roughness(dzdt);
@@ -487,7 +521,10 @@ class Cuerda
     thrust::device_vector<complex> L_k;
     thrust::device_vector<complex> zaux;
     thrust::device_vector<int> histogram_udot;
-    thrust::device_vector<int> histogram_phidot;    
+    thrust::device_vector<int> histogram_phidot;
+    
+    // height distribution
+	thrust::device_vector<int> pdf_u;
 };
 
 int two_system()
@@ -543,6 +580,7 @@ int one_system()
     
     std::ofstream outz("z_vs_t.dat");
     std::ofstream outSq("Sq_vs_t.dat");
+    std::ofstream outpdfu("pdfu_vs_t.dat");
     
     #ifdef BLOCHLINES
     std::ofstream bloch_out("bloch.dat");
@@ -636,6 +674,7 @@ int one_system()
             #endif
             //outSq << "Step: " << n <<  std::endl;
             cuerda.print_Sq_vs_t(outSq, n*dt);
+            cuerda.print_pdf_u(outpdfu, n*dt);
             
             #ifdef DEBUG
             std::cout << "done" << std::endl << std::flush;
@@ -761,7 +800,7 @@ int main(int argc, char **argv) {
 
     
     K = 0.796; //0.796f; // KPZ poner 0.5
-    N_n = 1.0; //0.016f; //KPZ poner 1
+    N_n = 0.016; //0.016f; //KPZ poner 1
     REAL Bw = alpha.real()*N_n/2.0f;
 
     // so we can enter dimensionless field
