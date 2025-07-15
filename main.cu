@@ -475,6 +475,14 @@ class Cuerda
       REAL phi0 = one_part_sol.imag();
       //histogramKernel(z, int* bins, int N, int Nbins, float xmin, float xmax);
     }
+    void print_conf_vs_t(std::ofstream &out, const REAL t)
+    {
+        for(int i=0;i<h_N;i++)
+        {
+            complex z_i = z[i];
+            out << i*dx << " " << z_i.real() << " " << z_i.imag() << " " << t << std::endl;
+        }
+    }
 
     void print_Sq_vs_t(std::ofstream &out, const REAL t)
     {
@@ -581,6 +589,7 @@ int one_system()
     std::ofstream outz("z_vs_t.dat");
     std::ofstream outSq("Sq_vs_t.dat");
     std::ofstream outpdfu("pdfu_vs_t.dat");
+    outz << "#t z_real z_imag z2_real z2_imag velzcm_real velzcm_imag velzcm2_real velzcm2_imag" << std::endl;
     
     #ifdef BLOCHLINES
     std::ofstream bloch_out("bloch.dat");
@@ -675,6 +684,7 @@ int one_system()
             //outSq << "Step: " << n <<  std::endl;
             cuerda.print_Sq_vs_t(outSq, n*dt);
             cuerda.print_pdf_u(outpdfu, n*dt);
+            cuerda.print_conf_vs_t(outz, n*dt);                 
             
             #ifdef DEBUG
             std::cout << "done" << std::endl << std::flush;
