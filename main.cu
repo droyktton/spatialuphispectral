@@ -482,6 +482,7 @@ class Cuerda
             complex z_i = z[i];
             out << i*dx << " " << z_i.real() << " " << z_i.imag() << " " << t << std::endl;
         }
+        out << "\n" << std::endl;
     }
 
     void print_Sq_vs_t(std::ofstream &out, const REAL t)
@@ -587,6 +588,7 @@ int one_system()
     std::cout << "cuerda initialized." << std::endl << std::flush;
     
     std::ofstream outz("z_vs_t.dat");
+    std::ofstream outzi("conf_vs_t.dat");
     std::ofstream outSq("Sq_vs_t.dat");
     std::ofstream outpdfu("pdfu_vs_t.dat");
     outz << "#t z_real z_imag z2_real z2_imag velzcm_real velzcm_imag velzcm2_real velzcm2_imag" << std::endl;
@@ -684,7 +686,7 @@ int one_system()
             //outSq << "Step: " << n <<  std::endl;
             cuerda.print_Sq_vs_t(outSq, n*dt);
             cuerda.print_pdf_u(outpdfu, n*dt);
-            cuerda.print_conf_vs_t(outz, n*dt);                 
+            cuerda.print_conf_vs_t(outzi, n*dt);                 
             
             #ifdef DEBUG
             std::cout << "done" << std::endl << std::flush;
