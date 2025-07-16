@@ -225,8 +225,68 @@ thrust::tuple<complex,complex> roughness(thrust::device_vector<complex> &z)
 
     zcm2 *= 1.0f/N_;
 
-    return make_tuple(zcm2, zcm);
+    return thrust::make_tuple(zcm2, zcm);
 }
+
+thrust::tuple<complex,complex,complex,complex> zmoments(thrust::device_vector<complex> &z)
+{
+    size_t N_ = z.size();
+    complex zcm = thrust::reduce(z.begin(), z.end());
+    zcm *= 1.0f/N_;
+
+    complex zcm2 = thrust::transform_reduce(
+        z.begin(),
+        z.end(),
+        [zcm]__device__ __host__ (complex z) {
+          REAL realdiff=z.real()-zcm.real();
+          REAL imagdiff=z.imag()-zcm.imag();
+          return complex(
+            realdiff*realdiff,
+            imagdiff*imagdiff
+          );
+        },
+        complex(0.0f, 0.0f),
+        thrust::plus<complex>());
+
+    zcm2 *= 1.0f/N_;
+
+    complex zcm3 = thrust::transform_reduce(
+        z.begin(),
+        z.end(),
+        [zcm,zcm2]__device__ __host__ (complex z) {
+          REAL realdiff=(z.real()-zcm.real())/sqrt(zcm2.real());
+          REAL imagdiff=(z.imag()-zcm.imag())/sqrt(zcm2.imag());
+          return complex(
+            realdiff*realdiff*realdiff,
+            imagdiff*imagdiff*imagdiff
+          );
+        },
+        complex(0.0f, 0.0f),
+        thrust::plus<complex>());
+
+    zcm3 *= 1.0f/N_;
+
+    complex zcm4 = thrust::transform_reduce(
+        z.begin(),
+        z.end(),
+        [zcm,zcm2]__device__ __host__ (complex z) {
+          REAL realdiff=(z.real()-zcm.real())/sqrt(zcm2.real());
+          REAL imagdiff=(z.imag()-zcm.imag())/sqrt(zcm2.imag());
+          return complex(
+            realdiff*realdiff*realdiff*realdiff,
+            imagdiff*imagdiff*imagdiff*imagdiff
+          );
+        },
+        complex(0.0f, 0.0f),
+        thrust::plus<complex>());
+
+    zcm4 *= 1.0f/N_;
+    zcm4 += -3.0;
+
+    return thrust::make_tuple(zcm, zcm2, zcm3, zcm4);
+}
+
+
 
 class Cuerda
 {
@@ -432,6 +492,11 @@ class Cuerda
       return roughness(z);
     }
     
+    thrust::tuple<complex,complex,complex,complex> height_moments()
+    {
+      return zmoments(z);
+    }
+    
     void print_pdf_u(std::ofstream &out, REAL t)
     {
         thrust::fill(pdf_u.begin(),pdf_u.end(), 0);
@@ -460,6 +525,7 @@ class Cuerda
         for(int i=0;i<NBINS;i++)
         out << i << " " << min+i*(max-min)/NBINS << " " << h_pdf_u[i] << " " << t << "\n";
         out << "\n" << std::endl;
+        
     }
     
     
@@ -467,6 +533,7 @@ class Cuerda
     {
       return roughness(dzdt);
     }
+
 
     void update_histogram()
     {
@@ -607,7 +674,7 @@ int one_system()
     unsigned int nlog = 1;
 
 
-    complex zcm2, zcm, velzcm2, velzcm;
+    complex zcm2, zcm, velzcm2, velzcm, zcm3, zcm4;
     thrust::tuple<complex,complex> result = cuerda.rough();
     zcm2 = thrust::get<0>(result);
     zcm = thrust::get<1>(result);
@@ -630,7 +697,25 @@ int one_system()
             std::cout << "saving results n=" << n << " " << std::flush;
             #endif
             
-            result = cuerda.rough();
+            thrust::tuple<complex,complex,complex,complex> moments = cuerda.height_moments();
+            zcm = thrust::get<0>(moments);
+            zcm2 = thrust::get<1>(moments);
+            zcm3 = thrust::get<2>(moments);
+            zcm4 = thrust::get<3>(moments);
+            
+            outz
+            << n*dt << " "
+            << zcm.real() << " "
+            << zcm.imag() << " "
+            << zcm2.real() << " "
+            << zcm2.imag() << " "
+            << zcm3.real() << " "
+            << zcm3.imag() << " "
+            << zcm4.real() << " "
+            << zcm4.imag() << " "
+            << std::endl;
+            
+/*            result = cuerda.rough();
             zcm2 = thrust::get<0>(result);
             zcm = thrust::get<1>(result);
             
@@ -649,7 +734,9 @@ int one_system()
             << velzcm2.real() << " " 
             << velzcm2.imag() << " "
             << std::endl;
-            
+  */
+  
+  
             if(fabs(zcm.imag())>2*M_PI*periodsphi*0.5 || n>steps*0.5)
             {
               av_cm += zcm;
@@ -812,7 +899,7 @@ int main(int argc, char **argv) {
 
     
     K = 0.796; //0.796f; // KPZ poner 0.5
-    N_n = 0.016; //0.016f; //KPZ poner 1
+    N_n = 0.1; //0.016f; //KPZ poner 1
     REAL Bw = alpha.real()*N_n/2.0f;
 
     // so we can enter dimensionless field
