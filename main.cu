@@ -675,6 +675,7 @@ int one_system()
 
 
     complex zcm2, zcm, velzcm2, velzcm, zcm3, zcm4;
+    //complex zcm2, zcm, zcm3, zcm4;
     thrust::tuple<complex,complex> result = cuerda.rough();
     zcm2 = thrust::get<0>(result);
     zcm = thrust::get<1>(result);
@@ -783,9 +784,14 @@ int one_system()
         }
         
         #ifdef BLOCHLINES
+        //if(n%BLOCHLINES==0 || n%BLOCHLINES==1 || n%BLOCHLINES==2 ){
         if(n%BLOCHLINES==0){
             thrust::host_vector<complex> z_host = cuerda.z;
-            for (int i = 0; i < h_N; ++i) {
+            thrust::tuple<complex,complex,complex,complex> moments = cuerda.height_moments();
+            zcm = thrust::get<0>(moments);
+            zcm2 = thrust::get<1>(moments);
+
+            /*for (int i = 0; i < h_N; ++i) {
                 double deriv = (z_host[(i+1)%h_N].imag()-z_host[(i-1+h_N)%h_N].imag())/(2.0f*dx);
                 double deriv2 = (z_host[(i+1)%h_N].imag()+z_host[(i-1+h_N)%h_N].imag()-2.0*z_host[i].imag())/(dx*dx);
                 bloch_out
@@ -795,7 +801,19 @@ int one_system()
                 << (deriv*deriv) << " "
                 << (deriv2*deriv2) << " "
                 << "\n";
+            }*/
+            for (int i = 1; i < h_N; ++i){
+               int phi_prev = int(floor(z_host[i-1].imag()*M_PI+0.5));
+               int phi = int(floor(z_host[i].imag()*M_PI+0.5));
+               if(phi_prev != phi) {
+                   bloch_out
+                   << n << " "
+                   << i * dx << " " << (phi_prev + phi)/2.0f - floor(zcm.imag()*M_PI+0.5) << " "
+                   << zcm2.real() 
+                   << "\n";
+               }
             }
+            
             bloch_out << "\n";
             bloch_out.flush();
         }
@@ -899,7 +917,7 @@ int main(int argc, char **argv) {
 
     
     K = 0.796; //0.796f; // KPZ poner 0.5
-    N_n = 0.1; //0.016f; //KPZ poner 1
+    N_n = 0.015; //0.016f; //KPZ poner 1
     REAL Bw = alpha.real()*N_n/2.0f;
 
     // so we can enter dimensionless field

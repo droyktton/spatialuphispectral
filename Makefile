@@ -14,7 +14,9 @@ FLAGS = --expt-extended-lambda -lcufft -std=c++17 -lstdc++fs -O2 \
 #-gencode arch=compute_89,code=sm_89 
 
 
-PARAMS = -DEPSILON=$(EPSILON) -DDOUBLE_PRECISION -DBLOCHLINES=1000 #-DTWO_SYSTEMS  
+BLOCHLINES?=1
+
+PARAMS = -DEPSILON=$(EPSILON) -DDOUBLE_PRECISION -DBLOCHLINES=$(BLOCHLINES) #-DTWO_SYSTEMS  
 
 LDFLAGS = -L/opt/nvidia/hpc_sdk/Linux_x86_64/23.7/math_libs/12.2/lib64 
 
