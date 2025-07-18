@@ -808,14 +808,20 @@ int one_system()
                 << "\n";
             }*/
             for (int i = 1; i < h_N; ++i){
-               int phi_prev = int(floor(z_host[i-1].imag()*M_PI+0.5));
-               int phi = int(floor(z_host[i].imag()*M_PI+0.5));
-               if(phi_prev != phi) {
+               int iphi_prev = int(floor(z_host[i-1].imag()*M_PI+0.5));
+               int iphi = int(floor(z_host[i].imag()*M_PI+0.5));
+               double u = z_host[i].real();
+               double phi = z_host[i].imag();
+               double velu = dzdt_host[i].real();
+               double velphi = dzdt_host[i].imag();
+               if(iphi_prev != iphi) {
                    bloch_out
                    << n << " "
-                   << i * dx << " " << (phi_prev + phi)/2.0f - floor(zcm.imag()*M_PI+0.5) << " "
-                   << zcm2.real() << " " << dzdt_host[i].real() << " "
-                   << zcm2.imag() << " " << dzdt_host[i].imag() << " " 
+                   << i * dx << " " 
+                   << (iphi_prev + iphi)/2.0f - floor(zcm.imag()*M_PI+0.5) << " "
+                   << zcm2.real() << " " << velu << " "
+                   << zcm2.imag() << " " << velphi << " " 
+                   << u << " " << phi << " "
                    << "\n";
                }
             }
