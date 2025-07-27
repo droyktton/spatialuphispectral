@@ -8,7 +8,7 @@ smo = 100000.
 sm(x)=int(x*smo)/(smo+0.); 
 #sm(x)=exp(int(log(x)*smo)/(smo+0.)); 
 
-set terminal qt 0 font "Sans,9" size 700,800
+#set terminal qt 0 font "Sans,9" size 700,800
 
 
 set multi
