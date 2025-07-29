@@ -21,12 +21,12 @@ PARAMS = -DEPSILON=$(EPSILON) -DDOUBLE_PRECISION #-DBLOCHLINES=$(BLOCHLINES) #-D
 LDFLAGS = -L/opt/nvidia/hpc_sdk/Linux_x86_64/23.7/math_libs/12.2/lib64 
 
 
-spatialuphispectral: main.cu
-	$(CXX) $(FLAGS) $(PARAMS) main.cu -o spatialuphispectral $(LDFLAGS) $(INCLUDES) 
+spatialuphispectral2: main.cu
+	$(CXX) $(FLAGS) $(PARAMS) main.cu -o spatialuphispectral2 $(LDFLAGS) $(INCLUDES) 
 
 
 update_git:
 	git add *.cu Makefile README.md *.gnu *.sh; git commit -m "program update"; git push
 
 clean:
-	rm -f spatialuphispectral
+	rm -f spatialuphispectral2

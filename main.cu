@@ -561,11 +561,12 @@ class Cuerda
       #endif
       
       int maxq = h_N/2;
-      if(h_N>8192) maxq = 4096;
+      //if(h_N>8192) maxq = 4096;
       
       int istep=1;
       //for(int i = 1; i < h_N/2; i+=istep) {
-      for(int i = 1; i < maxq; i+=istep) {
+      //for(int i = 1; i < maxq; i+=istep) {
+      for(int i = 1; i < maxq; i+=int(exp(0.0002*i))) {
         complex z_hat_i = z_hat[i];
         complex z_hat_i_neg = z_hat[(h_N-i)];
         
@@ -807,7 +808,9 @@ int one_system()
                 << (deriv2*deriv2) << " "
                 << "\n";
             }*/
-            for (int i = 1; i < h_N; ++i){
+            int Nbl=0;
+            //for (int i = 1; i < h_N; ++i){
+            for (int i = 1; i < 512; ++i){
                int iphi_prev = int(floor(z_host[i-1].imag()*M_PI+0.5));
                int iphi = int(floor(z_host[i].imag()*M_PI+0.5));
                double u = z_host[i].real();
@@ -815,6 +818,7 @@ int one_system()
                double velu = dzdt_host[i].real();
                double velphi = dzdt_host[i].imag();
                if(iphi_prev != iphi) {
+                   Nbl++;
                    bloch_out
                    << n << " "
                    << i * dx << " " 
@@ -826,8 +830,10 @@ int one_system()
                }
             }
             
-            bloch_out << "\n";
-            bloch_out.flush();
+            if(Nbl>0) {
+                bloch_out << "\n";
+                bloch_out.flush();
+            }
         }
         #endif
     }
@@ -929,7 +935,7 @@ int main(int argc, char **argv) {
 
     
     K = 0.6144; //0.796f; // KPZ poner 0.5
-    N_n = 0.01667; //0.016f; //KPZ poner 1
+    N_n = 0.300; //0.01667; //0.016f; //KPZ poner 1
     REAL Bw = alpha.real()*N_n/2.0f;
 
     // so we can enter dimensionless field
