@@ -811,21 +811,25 @@ int one_system()
             int Nbl=0;
             //for (int i = 1; i < h_N; ++i){
             for (int i = 1; i < 512; ++i){
-               int iphi_prev = int(floor(z_host[i-1].imag()*M_PI+0.5));
-               int iphi = int(floor(z_host[i].imag()*M_PI+0.5));
+               int iphi_prev = int(floor(z_host[i-1].imag()/M_PI+0.5));
+               int iphi = int(floor(z_host[i].imag()/M_PI+0.5));
                double u = z_host[i].real();
+               double phi_prev = z_host[i-1].imag();
                double phi = z_host[i].imag();
                double velu = dzdt_host[i].real();
                double velphi = dzdt_host[i].imag();
+               double midpointphi=(phi+phi_prev)/2.0;
+               
                if(iphi_prev != iphi) {
+               //if(sin(phi)*sin(phi_prev)<0.0f) {
                    Nbl++;
                    bloch_out
                    << n << " "
                    << i * dx << " " 
-                   << (iphi_prev + iphi)/2.0f - floor(zcm.imag()*M_PI+0.5) << " "
+                   << velzcm.real() << " "
                    << zcm2.real() << " " << velu << " "
                    << zcm2.imag() << " " << velphi << " " 
-                   << u << " " << phi << " "
+                   << u << " " << midpointphi << " "
                    << "\n";
                }
             }
@@ -935,7 +939,7 @@ int main(int argc, char **argv) {
 
     
     K = 0.6144; //0.796f; // KPZ poner 0.5
-    N_n = 0.300; //0.01667; //0.016f; //KPZ poner 1
+    N_n = 0.01667; //0.01667; //0.016f; //KPZ poner 1
     REAL Bw = alpha.real()*N_n/2.0f;
 
     // so we can enter dimensionless field

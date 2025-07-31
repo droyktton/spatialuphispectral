@@ -16,17 +16,17 @@ FLAGS = --expt-extended-lambda -lcufft -std=c++17 -lstdc++fs -O2 \
 
 BLOCHLINES?=1
 
-PARAMS = -DEPSILON=$(EPSILON) -DDOUBLE_PRECISION #-DBLOCHLINES=$(BLOCHLINES) #-DTWO_SYSTEMS  
+PARAMS = -DEPSILON=$(EPSILON) -DDOUBLE_PRECISION -DBLOCHLINES=$(BLOCHLINES) #-DTWO_SYSTEMS  
 
 LDFLAGS = -L/opt/nvidia/hpc_sdk/Linux_x86_64/23.7/math_libs/12.2/lib64 
 
 
-spatialuphispectral2: main.cu
-	$(CXX) $(FLAGS) $(PARAMS) main.cu -o spatialuphispectral2 $(LDFLAGS) $(INCLUDES) 
+spatialuphispectral: main.cu
+	$(CXX) $(FLAGS) $(PARAMS) main.cu -o spatialuphispectral $(LDFLAGS) $(INCLUDES) 
 
 
 update_git:
 	git add *.cu Makefile README.md *.gnu *.sh; git commit -m "program update"; git push
 
 clean:
-	rm -f spatialuphispectral2
+	rm -f spatialuphispectral
