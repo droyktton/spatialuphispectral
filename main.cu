@@ -775,7 +775,10 @@ int one_system()
             //outSq << "Step: " << n <<  std::endl;
             cuerda.print_Sq_vs_t(outSq, n*dt);
             cuerda.print_pdf_u(outpdfu, n*dt);
+            
+            #ifndef PRINTCONFIGS
             cuerda.print_conf_vs_t(outzi, n*dt);                 
+            #endif
             
             #ifdef DEBUG
             std::cout << "done" << std::endl << std::flush;
@@ -783,6 +786,13 @@ int one_system()
             
             nlog *= 2;
         }
+        
+        #ifdef PRINTCONFIGS
+        if(n % PRINTCONFIGS == 0) 
+        {
+            cuerda.print_conf_vs_t(outzi, n*dt);                 
+        }
+        #endif
         
         #ifdef BLOCHLINES
         //if(n%BLOCHLINES==0 || n%BLOCHLINES==1 || n%BLOCHLINES==2 ){
