@@ -291,6 +291,7 @@ thrust::tuple<complex,complex,complex,complex> zmoments(thrust::device_vector<co
 class Cuerda
 {
     public:
+    
     Cuerda(){
       z.resize(h_N);
       z_hat.resize(h_N);
@@ -409,12 +410,39 @@ class Cuerda
       z = z0;*/
       
       thrust::fill(z.begin(), z.end(), complex(0.0f, 0.0f));
-      perturb_conf(EPSILON);
       thrust::copy(z.begin(), z.end(), z_prev.begin());
       thrust::fill(dzdt.begin(), dzdt.end(), complex(0.0f, 0.0f));
       
       // Init linear operator
       init_wave_numbers<<<(h_N+255)/256, 256>>>(thrust::raw_pointer_cast(L_k.data()), K, L);
+
+      std::ifstream infile("z_initial.dat");
+      if (infile.good()) 
+      {
+        std::cout << "Reading initial conditions from z_initial.dat\n";
+        std::vector<complex> h_z; // host temporary storage
+        float re, im;
+        while (infile >> re >> im) {
+            h_z.emplace_back(re, im);
+        }
+        infile.close();
+
+        if (h_z.size() == z.size()) {
+            thrust::copy(h_z.begin(), h_z.end(), z.begin());
+        } else {
+            std::cerr << "Warning: z_initial.dat has " << h_z.size()
+                      << " entries, expected " << z.size() << ". Falling back to zeros.\n";
+            thrust::fill(z.begin(), z.end(), complex(0.0f, 0.0f));
+            perturb_conf(EPSILON);
+        }
+      } 
+      else {
+        std::cout << "z_initial.dat not found. Initializing with zeros.\n";
+        thrust::fill(z.begin(), z.end(), complex(0.0f, 0.0f));
+        perturb_conf(EPSILON);
+    }
+      
+    
 
       #ifdef DEBUG
       std::cout << "K=" << K << std::endl;
@@ -563,7 +591,7 @@ class Cuerda
       int maxq = h_N/2;
       //if(h_N>8192) maxq = 4096;
       
-      int istep=1;
+      //int istep=1;
       //for(int i = 1; i < h_N/2; i+=istep) {
       //for(int i = 1; i < maxq; i+=istep) {
       for(int i = 1; i < maxq; i+=int(exp(0.0002*i))) {
@@ -675,7 +703,7 @@ int one_system()
     unsigned int nlog = 1;
 
 
-    complex zcm2, zcm, velzcm2, velzcm, zcm3, zcm4;
+    complex zcm2, zcm, velzcm, zcm3, zcm4; // velzcm2
     //complex zcm2, zcm, zcm3, zcm4;
     thrust::tuple<complex,complex> result = cuerda.rough();
     zcm2 = thrust::get<0>(result);
@@ -689,8 +717,11 @@ int one_system()
     std::cout << "starting loop..." << std::endl << std::flush;
     #endif
 
+    thrust::tuple<complex,complex,complex,complex> moments0 = cuerda.height_moments();
+    complex zcm_initial = thrust::get<0>(moments0);
+
     int n = 0;
-    for (n = 0; ((fabs(zcm.imag())<2.0f*M_PI*periodsphi) && n<steps); ++n) {
+    for (n = 0; ((fabs(zcm.imag()-zcm_initial.imag())<2.0f*M_PI*periodsphi) && n<steps); ++n) {
         cuerda.step();
 
         if (n % 100 == 0) {
@@ -739,7 +770,7 @@ int one_system()
   */
   
   
-            if(fabs(zcm.imag())>2*M_PI*periodsphi*0.5 || n>steps*0.5)
+            if(fabs(zcm.imag()-zcm_initial.imag())>2*M_PI*periodsphi*0.5 || n>steps*0.5)
             {
               av_cm += zcm;
               av_cm2 += zcm2;
@@ -752,7 +783,7 @@ int one_system()
             #endif
         }
         
-        if(fabs(zcm.imag())>2*M_PI*periodsphi*0.9 && !equilibrated)
+        if(fabs(zcm.imag()-zcm_initial.imag())>2*M_PI*periodsphi*0.9 && !equilibrated)
         {
             std::cout << "Equilibration finished at step: " << n << ", distance traveled: " << zcm.imag() << std::endl;
             equilibrated = true;
@@ -804,7 +835,7 @@ int one_system()
             zcm2 = thrust::get<1>(moments);
             
             thrust::tuple<complex,complex> resultvel = cuerda.vel_rough();
-            velzcm2 = thrust::get<0>(resultvel);
+            //velzcm2 = thrust::get<0>(resultvel);
             velzcm = thrust::get<1>(resultvel);
 
             /*for (int i = 0; i < h_N; ++i) {
@@ -853,14 +884,16 @@ int one_system()
     }
 
     // Save final result
-    thrust::host_vector<complex> z_final = cuerda.z;
+    thrust::host_vector<complex> z_final(cuerda.z);
     thrust::host_vector<complex> dzdt_final = cuerda.dzdt;
     std::ofstream out("z_final.dat");
     for (int i = 0; i < h_N; ++i) {
+        // out 
+        // << i * dx << "\t" << z_final[i].real() << "\t" << z_final[i].imag() 
+        // << "\t" << dzdt_final[i].real() << "\t" << dzdt_final[i].imag()
+        // << "\n";
         out 
-        << i * dx << "\t" << z_final[i].real() << "\t" << z_final[i].imag() 
-        << "\t" << dzdt_final[i].real() << "\t" << dzdt_final[i].imag()
-        << "\n";
+        << z_final[i].real() << "\t" << z_final[i].imag() << "\n";
     }
     out.close();
     
