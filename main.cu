@@ -792,6 +792,7 @@ int one_system()
             zcm_middle = thrust::get<1>(result);
             n_middle = n;
         }
+        
         if(n==int(steps*0.8)) {
             result = cuerda.rough();
             zcm_half_steps = thrust::get<1>(result);
