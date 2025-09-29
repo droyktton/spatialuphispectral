@@ -429,6 +429,7 @@ class Cuerda
 
         if (h_z.size() == z.size()) {
             thrust::copy(h_z.begin(), h_z.end(), z.begin());
+            perturb_conf(EPSILON);
         } else {
             std::cerr << "Warning: z_initial.dat has " << h_z.size()
                       << " entries, expected " << z.size() << ". Falling back to zeros.\n";
