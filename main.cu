@@ -178,7 +178,7 @@ __global__ void nonlinear_term_kernel(const complex* z, complex* nonlinear, REAL
     if (i < N) {
         REAL phi = -z[i].imag();
         //nonlinear[i] = -complex(0.0f, 1.0f) * (N_n / 2.0f) * sinf(2 * phi); // different in the notes...
-        #ifdef CHILOCALTILT    
+        #ifdef CHILOCALTILT   
         REAL dudx = (z[(i+1)%N].real()-z[(i-1+N)%N].real())/(2.0f*L/N);
         REAL chi = atanf(dudx);
         nonlinear[i] = complex(0.0f, 1.0f) * (N_n / 2.0f) * sinf(2 * phi - 2.0 * chi);
