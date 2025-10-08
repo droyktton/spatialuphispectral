@@ -173,12 +173,18 @@ __global__ void init_wave_numbers(complex* L_k, REAL K, REAL L) {
     }
 }
 
-__global__ void nonlinear_term_kernel(const complex* z, complex* nonlinear, REAL N_n) {
+__global__ void nonlinear_term_kernel(const complex* z, complex* nonlinear, REAL N_n, REAL L) {
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     if (i < N) {
         REAL phi = -z[i].imag();
         //nonlinear[i] = -complex(0.0f, 1.0f) * (N_n / 2.0f) * sinf(2 * phi); // different in the notes...
-        nonlinear[i] = complex(0.0f, 1.0f) * (N_n / 2.0f) * sinf(2 * phi);
+        #ifdef CHILOCALTILT    
+        REAL dudx = (z[(i+1)%N].real()-z[(i-1+N)%N].real())/(2.0f*L/N);
+        REAL chi = atanf(dudx);
+        nonlinear[i] = complex(0.0f, 1.0f) * (N_n / 2.0f) * sinf(2 * phi - 2.0 * chi);
+        #else
+        nonlinear[i] = complex(0.0f, 1.0f) * (N_n / 2.0f) * sinf(2 * phi);        
+        #endif
     }
 }
 
@@ -461,7 +467,7 @@ class Cuerda
     void step(){
        nonlinear_term_kernel<<<(h_N+255)/256, 256>>>(
             thrust::raw_pointer_cast(z.data()),
-            thrust::raw_pointer_cast(nonlinear.data()), N_n);
+            thrust::raw_pointer_cast(nonlinear.data()), N_n, L);
 
         #ifdef DOUBLE_PRECISION
         cufftExecZ2Z(plan,
