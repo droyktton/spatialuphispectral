@@ -1017,10 +1017,10 @@ int main(int argc, char **argv) {
     out << "periodsphi=" << periodsphi << std::endl;
     out << "seed=" << seed << std::endl;
     out << "Bw=" << Bw << std::endl;
-    out.close();
     #ifdef CHILOCALTILT
     out << "Chiral local tilt term included." << std::endl;
     #endif
+    out.close();
     
     #ifndef TWO_SYSTEMS
     one_system();
