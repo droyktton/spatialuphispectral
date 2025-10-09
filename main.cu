@@ -1018,6 +1018,9 @@ int main(int argc, char **argv) {
     out << "seed=" << seed << std::endl;
     out << "Bw=" << Bw << std::endl;
     out.close();
+    #ifdef CHILOCALTILT
+    out << "Chiral local tilt term included." << std::endl;
+    #endif
     
     #ifndef TWO_SYSTEMS
     one_system();
