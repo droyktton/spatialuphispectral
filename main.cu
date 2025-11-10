@@ -1020,6 +1020,15 @@ int main(int argc, char **argv) {
     #ifdef CHILOCALTILT
     out << "Chiral local tilt term included." << std::endl;
     #endif
+    #ifdef BLOCHLINES
+    out << "BLOCHLINES=" << BLOCHLINES << std::endl;
+    #endif
+    #ifdef TWO_SYSTEMS
+    out << "TWO_SYSTEMS" << std::endl;    
+    #else
+    out << "ONE_SYSTEM" << std::endl;    
+    #endif
+        
     out.close();
     
     #ifndef TWO_SYSTEMS
